@@ -18,7 +18,7 @@ namespace PeanutWarrior.Prototype
         private float remainingTime;
         private bool encounterActive;
         private bool enraged;
-        private string patternName = "균왕 자동 전투 대기";
+        private string patternName = "보스 자동 전투 대기";
 
         public float RemainingTime => remainingTime;
         public string PatternName => patternName;
@@ -63,14 +63,14 @@ namespace PeanutWarrior.Prototype
             remainingTime = BossTimeLimit;
             encounterActive = true;
             enraged = false;
-            patternName = "AUTO · 균왕과 전투 중";
+            patternName = "AUTO · 보스와 전투 중";
         }
 
         private void EndEncounter()
         {
             encounterActive = false;
             enraged = false;
-            patternName = "균왕 자동 전투 대기";
+            patternName = "보스 자동 전투 대기";
         }
 
         private void Update()
@@ -87,7 +87,7 @@ namespace PeanutWarrior.Prototype
             if (remainingTime > 0f) return;
             remainingTime = 0f;
             encounterActive = false;
-            patternName = "제한시간 초과 · 균왕전 실패";
+            patternName = "제한시간 초과 · 보스전 실패";
             bossDeathMethod?.Invoke(stageFlow, null);
         }
     }

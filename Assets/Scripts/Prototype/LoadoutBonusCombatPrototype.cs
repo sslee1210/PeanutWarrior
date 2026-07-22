@@ -8,8 +8,8 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Applies the bonus portion of sword rarity, sword level and element research
-    /// to basic attacks and automatic skills without replacing the authoritative
+    /// Applies the bonus portion of the equipped sword's rarity, level and collection
+    /// progress to basic attacks and automatic skills without replacing the authoritative
     /// combat loop in CombatPrototypeArena.
     /// </summary>
     [DefaultExecutionOrder(16000)]
@@ -21,7 +21,6 @@ namespace PeanutWarrior.Prototype
         private CombatPrototypeArena arena;
         private StageFlowController stageFlow;
         private SwordProgressionPrototype swords;
-        private MetaProgressionPrototype meta;
 
         private FieldInfo enemiesField;
         private FieldInfo playerPositionField;
@@ -34,7 +33,7 @@ namespace PeanutWarrior.Prototype
 
         private float previousAttackCooldown;
         private readonly float[] previousSkillCooldowns = new float[8];
-        private string lastMessage = "장비 보너스 전투 연결 준비";
+        private string lastMessage = "검 장비 전투 연결 준비";
 
         public string LastMessage => lastMessage;
 
@@ -52,7 +51,6 @@ namespace PeanutWarrior.Prototype
             arena = FindFirstObjectByType<CombatPrototypeArena>();
             stageFlow = FindFirstObjectByType<StageFlowController>();
             swords = FindFirstObjectByType<SwordProgressionPrototype>();
-            meta = FindFirstObjectByType<MetaProgressionPrototype>();
             if (arena == null || stageFlow == null)
             {
                 enabled = false;
@@ -97,7 +95,7 @@ namespace PeanutWarrior.Prototype
 
             float bonusDamage = ReadAttackDamage() * bonusRatio;
             DealBonusDamage(target, bonusDamage);
-            lastMessage = $"검 장비 기본 공격 보너스 +{Mathf.CeilToInt(bonusDamage)}";
+            lastMessage = $"검 기본 공격 보너스 +{Mathf.CeilToInt(bonusDamage)}";
         }
 
         private void DetectAutomaticSkills()
@@ -161,8 +159,7 @@ namespace PeanutWarrior.Prototype
         {
             int element = GetActiveElementIndex();
             float swordMultiplier = swords != null ? swords.GetDamageMultiplier(element) : 1f;
-            float researchMultiplier = meta != null ? meta.GetElementDamageMultiplier(element) : 1f;
-            return Mathf.Max(0f, swordMultiplier * researchMultiplier - 1f);
+            return Mathf.Max(0f, swordMultiplier - 1f);
         }
 
         private int GetActiveElementIndex()

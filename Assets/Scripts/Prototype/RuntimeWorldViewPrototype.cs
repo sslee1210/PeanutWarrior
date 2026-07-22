@@ -158,7 +158,7 @@ namespace PeanutWarrior.Prototype
 
             worldCamera.orthographic = true;
             worldCamera.orthographicSize = 5.4f;
-            worldCamera.backgroundColor = new Color(0.08f, 0.12f, 0.08f);
+            worldCamera.backgroundColor = new Color(0.34f, 0.48f, 0.30f);
             worldCamera.clearFlags = CameraClearFlags.SolidColor;
             worldCamera.transform.position = new Vector3(0f, 0f, -10f);
             cameraBasePosition = worldCamera.transform.position;
@@ -170,7 +170,7 @@ namespace PeanutWarrior.Prototype
             floor.transform.SetParent(worldRoot.transform, false);
             SpriteRenderer renderer = floor.AddComponent<SpriteRenderer>();
             renderer.sprite = unitSprite;
-            renderer.color = new Color(0.23f, 0.34f, 0.17f);
+            renderer.color = new Color(0.48f, 0.62f, 0.31f);
             renderer.drawMode = SpriteDrawMode.Sliced;
             renderer.size = new Vector2(WorldHalfWidth * 2.15f, WorldHalfHeight * 2.2f);
             renderer.sortingOrder = -20;
@@ -179,11 +179,17 @@ namespace PeanutWarrior.Prototype
             {
                 GameObject patch = new GameObject("Field Patch");
                 patch.transform.SetParent(worldRoot.transform, false);
-                patch.transform.position = new Vector3(UnityEngine.Random.Range(-WorldHalfWidth, WorldHalfWidth), UnityEngine.Random.Range(-WorldHalfHeight, WorldHalfHeight), 0f);
-                patch.transform.localScale = new Vector3(UnityEngine.Random.Range(0.2f, 0.55f), UnityEngine.Random.Range(0.08f, 0.2f), 1f);
+                patch.transform.position = new Vector3(
+                    UnityEngine.Random.Range(-WorldHalfWidth, WorldHalfWidth),
+                    UnityEngine.Random.Range(-WorldHalfHeight, WorldHalfHeight),
+                    0f);
+                patch.transform.localScale = new Vector3(
+                    UnityEngine.Random.Range(0.2f, 0.55f),
+                    UnityEngine.Random.Range(0.08f, 0.2f),
+                    1f);
                 SpriteRenderer patchRenderer = patch.AddComponent<SpriteRenderer>();
                 patchRenderer.sprite = unitSprite;
-                patchRenderer.color = new Color(0.38f, 0.48f, 0.22f, 0.55f);
+                patchRenderer.color = new Color(0.66f, 0.76f, 0.34f, 0.55f);
                 patchRenderer.sortingOrder = -19;
             }
         }
@@ -243,7 +249,9 @@ namespace PeanutWarrior.Prototype
             healthFill.transform.localPosition = new Vector3(-0.48f, 0f, 0f);
             SpriteRenderer healthFillRenderer = healthFill.AddComponent<SpriteRenderer>();
             healthFillRenderer.sprite = unitSprite;
-            healthFillRenderer.color = boss ? new Color(0.9f, 0.18f, 0.12f) : new Color(0.25f, 0.9f, 0.3f);
+            healthFillRenderer.color = boss
+                ? new Color(0.9f, 0.18f, 0.12f)
+                : new Color(0.25f, 0.9f, 0.3f);
             healthFillRenderer.sortingOrder = 8;
 
             return new UnitView
@@ -272,7 +280,10 @@ namespace PeanutWarrior.Prototype
             Vector2 source = (Vector2)playerPositionField.GetValue(arena);
             Vector3 target = SourceToWorld(source);
             float speed = Vector3.Distance(previousPlayerPosition, target) / Mathf.Max(Time.deltaTime, 0.0001f);
-            playerView.Root.transform.position = Vector3.Lerp(playerView.Root.transform.position, target, 1f - Mathf.Exp(-26f * Time.deltaTime));
+            playerView.Root.transform.position = Vector3.Lerp(
+                playerView.Root.transform.position,
+                target,
+                1f - Mathf.Exp(-26f * Time.deltaTime));
             playerView.Root.transform.localScale = Vector3.one * (0.95f + Mathf.Sin(Time.time * 8f) * 0.025f);
             playerView.Body.flipX = target.x < previousPlayerPosition.x;
             previousPlayerPosition = target;
@@ -304,8 +315,13 @@ namespace PeanutWarrior.Prototype
                 if (!enemyViews.TryGetValue(enemy, out UnitView view))
                 {
                     Color color = isBoss ? new Color(0.72f, 0.12f, 0.13f) : RandomEnemyColor(i);
-                    view = CreateUnitView(isBoss ? "Boss View" : "Monster View", isBoss, color, isBoss ? "침공 보스" : MonsterName(i));
-                    view.Root.transform.localScale = Vector3.one * (isBoss ? 1.35f : UnityEngine.Random.Range(0.7f, 0.92f));
+                    view = CreateUnitView(
+                        isBoss ? "Boss View" : "Monster View",
+                        isBoss,
+                        color,
+                        isBoss ? "침공 보스" : MonsterName(i));
+                    view.Root.transform.localScale = Vector3.one *
+                        (isBoss ? 1.35f : UnityEngine.Random.Range(0.7f, 0.92f));
                     Rigidbody2D body = view.Root.AddComponent<Rigidbody2D>();
                     body.bodyType = RigidbodyType2D.Kinematic;
                     body.gravityScale = 0f;
@@ -316,7 +332,10 @@ namespace PeanutWarrior.Prototype
 
                 Vector2 sourcePosition = ReadVector2(enemyType, enemy, "Position");
                 Vector3 targetPosition = SourceToWorld(sourcePosition);
-                view.Root.transform.position = Vector3.Lerp(view.Root.transform.position, targetPosition, 1f - Mathf.Exp(-18f * Time.deltaTime));
+                view.Root.transform.position = Vector3.Lerp(
+                    view.Root.transform.position,
+                    targetPosition,
+                    1f - Mathf.Exp(-18f * Time.deltaTime));
 
                 float hp = ReadFloat(enemyType, enemy, "Hp");
                 float maxHp = ReadFloat(enemyType, enemy, "MaxHp");
@@ -337,7 +356,8 @@ namespace PeanutWarrior.Prototype
                 else
                     view.Body.color = StatusColor(enemyType, enemy, view.IsBoss, i);
 
-                float pulse = 1f + Mathf.Sin(Time.time * (isBoss ? 3.5f : 5.5f) + i) * (isBoss ? 0.035f : 0.02f);
+                float pulse = 1f + Mathf.Sin(Time.time * (isBoss ? 3.5f : 5.5f) + i) *
+                    (isBoss ? 0.035f : 0.02f);
                 float baseScale = isBoss ? 1.35f : 0.82f;
                 view.Root.transform.localScale = Vector3.one * baseScale * pulse;
             }
@@ -363,9 +383,12 @@ namespace PeanutWarrior.Prototype
         private void SpawnDamageText(Vector3 position, float damage, bool critical)
         {
             GameObject textObject = new GameObject("Damage Number");
-            textObject.transform.position = position + new Vector3(UnityEngine.Random.Range(-0.18f, 0.18f), 0.65f, 0f);
+            textObject.transform.position = position +
+                new Vector3(UnityEngine.Random.Range(-0.18f, 0.18f), 0.65f, 0f);
             TextMesh text = textObject.AddComponent<TextMesh>();
-            text.text = critical ? $"치명! {Mathf.CeilToInt(damage)}" : Mathf.CeilToInt(damage).ToString();
+            text.text = critical
+                ? $"치명! {Mathf.CeilToInt(damage)}"
+                : Mathf.CeilToInt(damage).ToString();
             text.anchor = TextAnchor.MiddleCenter;
             text.alignment = TextAlignment.Center;
             text.fontSize = critical ? 54 : 42;
@@ -404,7 +427,9 @@ namespace PeanutWarrior.Prototype
                 renderer.sprite = unitSprite;
                 renderer.color = color;
                 renderer.sortingOrder = 20;
-                StartCoroutine(AnimateParticle(particle, UnityEngine.Random.insideUnitCircle.normalized * UnityEngine.Random.Range(1.2f, 3.4f)));
+                StartCoroutine(AnimateParticle(
+                    particle,
+                    UnityEngine.Random.insideUnitCircle.normalized * UnityEngine.Random.Range(1.2f, 3.4f)));
             }
         }
 
@@ -436,14 +461,23 @@ namespace PeanutWarrior.Prototype
             }
             else
             {
-                worldCamera.transform.position = Vector3.Lerp(worldCamera.transform.position, cameraBasePosition, 1f - Mathf.Exp(-20f * Time.deltaTime));
+                worldCamera.transform.position = Vector3.Lerp(
+                    worldCamera.transform.position,
+                    cameraBasePosition,
+                    1f - Mathf.Exp(-20f * Time.deltaTime));
             }
         }
 
         private static Vector3 SourceToWorld(Vector2 source)
         {
-            float x = Mathf.Lerp(-WorldHalfWidth, WorldHalfWidth, Mathf.InverseLerp(SourceLeft, SourceRight, source.x));
-            float y = Mathf.Lerp(WorldHalfHeight, -WorldHalfHeight, Mathf.InverseLerp(SourceTop, SourceBottom, source.y));
+            float x = Mathf.Lerp(
+                -WorldHalfWidth,
+                WorldHalfWidth,
+                Mathf.InverseLerp(SourceLeft, SourceRight, source.x));
+            float y = Mathf.Lerp(
+                WorldHalfHeight,
+                -WorldHalfHeight,
+                Mathf.InverseLerp(SourceTop, SourceBottom, source.y));
             return new Vector3(x, y, 0f);
         }
 
@@ -467,8 +501,10 @@ namespace PeanutWarrior.Prototype
 
         private static Color StatusColor(Type type, object enemy, bool boss, int index)
         {
-            if (ReadFloat(type, enemy, "BurnTimer") > 0f) return new Color(1f, 0.3f, 0.08f);
-            if (ReadFloat(type, enemy, "FrostTimer") > 0f) return new Color(0.3f, 0.75f, 1f);
+            if (ReadFloat(type, enemy, "BurnTimer") > 0f)
+                return new Color(1f, 0.3f, 0.08f);
+            if (ReadFloat(type, enemy, "FrostTimer") > 0f)
+                return new Color(0.3f, 0.75f, 1f);
             return boss ? new Color(0.72f, 0.12f, 0.13f) : RandomEnemyColor(index);
         }
 
@@ -493,6 +529,11 @@ namespace PeanutWarrior.Prototype
 
         private void OnGUI()
         {
+            // The old debug toggle overlapped the new player-status panel and could
+            // invisibly receive clicks, hiding the entire battlefield. It is only
+            // available when the consolidated mobile UI is not running.
+            if (FindFirstObjectByType<MobileIdleUiPrototype>() != null) return;
+
             Rect toggle = new Rect(15f, 15f, 165f, 34f);
             if (GUI.Button(toggle, worldVisible ? "2D 월드 숨기기" : "2D 월드 표시"))
             {

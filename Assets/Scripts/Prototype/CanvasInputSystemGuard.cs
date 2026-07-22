@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -36,12 +37,19 @@ namespace PeanutWarrior.Prototype
             if (inputModule == null)
                 inputModule = eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
 
+            MethodInfo assignDefaults = typeof(InputSystemUIInputModule).GetMethod(
+                "AssignDefaultActions",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            assignDefaults?.Invoke(inputModule, null);
+
             BaseInputModule[] modules = eventSystem.GetComponents<BaseInputModule>();
             for (int i = 0; i < modules.Length; i++)
             {
                 if (modules[i] != null && modules[i] != inputModule)
                     modules[i].enabled = false;
             }
+
+            inputModule.enabled = true;
         }
     }
 }

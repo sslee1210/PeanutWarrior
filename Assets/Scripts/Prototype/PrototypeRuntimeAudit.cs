@@ -45,6 +45,7 @@ namespace PeanutWarrior.Prototype
             RequireSingle<BossPatternWorldViewPrototype>(errors);
             RequireSingle<RuntimeWorldViewPrototype>(errors);
             RequireSingle<PeanutMobileCanvasPrototype>(errors);
+            RequireSingle<PeanutMenuLayoutV2>(errors);
             RequireSingle<PeanutCanvasLayoutGuard>(errors);
             RequireSingle<PrototypeSaveBridge>(errors);
             RequireSingle<PrototypeSaveIntegrityGuard>(errors);
@@ -69,6 +70,7 @@ namespace PeanutWarrior.Prototype
             AuditBoss(errors);
             AuditWorld(errors, warnings);
             AuditCanvas(errors, warnings);
+            AuditMenuLayout(errors);
             AuditSaveIntegrity(errors);
             AuditFirstClear(errors);
             AuditEffectPool(errors, warnings);
@@ -76,7 +78,7 @@ namespace PeanutWarrior.Prototype
             var report = new StringBuilder();
             report.AppendLine("[PeanutWarrior Runtime Audit]");
             if (errors.Count == 0)
-                report.AppendLine("PASS · core idle combat, six-tab Canvas UI, global skill AUTO, final ten-stat growth and save bindings are valid.");
+                report.AppendLine("PASS · core idle combat, six-tab Canvas UI, menu layout V2, global skill AUTO, final ten-stat growth and save bindings are valid.");
             else
             {
                 report.AppendLine($"FAIL · {errors.Count} blocking issue(s)");
@@ -189,11 +191,16 @@ namespace PeanutWarrior.Prototype
         {
             Type type = typeof(SwordProgressionPrototype);
             RequireMethods(type, new[] { "RegisterSummon", "UpgradeSword", "ManualSynthesize", "GetDamageMultiplier" }, PublicInstance, errors);
-            if ((int)SwordProgressionPrototype.SwordRarity.Rare != 1 ||
-                (int)SwordProgressionPrototype.SwordRarity.Epic != 2 ||
-                (int)SwordProgressionPrototype.SwordRarity.Unique != 3 ||
-                (int)SwordProgressionPrototype.SwordRarity.Legend != 4)
+
+            string[] names = { "Rare", "Epic", "Unique", "Legend" };
+            int[] expectedValues = { 1, 2, 3, 4 };
+            for (int i = 0; i < names.Length; i++)
+            {
+                object parsed = Enum.Parse(typeof(SwordProgressionPrototype.SwordRarity), names[i]);
+                if (Convert.ToInt32(parsed) == expectedValues[i]) continue;
                 errors.Add("Sword grade order must be Rare → Epic → Unique → Legend.");
+                break;
+            }
         }
 
         private static void AuditIdle(List<string> errors)
@@ -247,6 +254,17 @@ namespace PeanutWarrior.Prototype
             else if (!runtimeCanvas.gameObject.activeInHierarchy) errors.Add("Mobile Canvas is inactive.");
             if (FindFirstObjectByType<EventSystem>() == null) errors.Add("No EventSystem exists for Canvas buttons.");
             if (Screen.width < Screen.height) warnings.Add("Current display is portrait; the game is designed for landscape.");
+        }
+
+        private static void AuditMenuLayout(List<string> errors)
+        {
+            PeanutMenuLayoutV2 layout = FindFirstObjectByType<PeanutMenuLayoutV2>();
+            if (layout == null) return;
+            if (!layout.enabled) errors.Add("PeanutMenuLayoutV2 is disabled.");
+            if (layout.LayoutVersion != 2) errors.Add($"Expected menu layout version 2, found {layout.LayoutVersion}.");
+            if (layout.ManagedPageCount != 8) errors.Add($"Expected 8 redesigned inner pages, found {layout.ManagedPageCount}.");
+            if (!layout.UsesTwoColumnGrowth) errors.Add("The final growth page is not using the two-column layout.");
+            if (!layout.UsesConstantButtonBackgrounds) errors.Add("Button backgrounds are not locked to the constant-color interaction style.");
         }
 
         private static void AuditSaveIntegrity(List<string> errors)

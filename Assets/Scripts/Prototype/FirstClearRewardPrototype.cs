@@ -82,7 +82,7 @@ namespace PeanutWarrior.Prototype
             string clearKey = Prefix + "Stage." + clearedGlobalStage;
             if (PlayerPrefs.GetInt(clearKey, 0) == 1)
             {
-                lastMessage = $"균왕 반복 처치 · 누적 {bossKills}회";
+                lastMessage = $"보스 반복 처치 · 누적 {bossKills}회";
                 SaveCounters();
                 return;
             }

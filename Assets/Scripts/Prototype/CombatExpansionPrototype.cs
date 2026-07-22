@@ -134,7 +134,9 @@ namespace PeanutWarrior.Prototype
 
         private void TryStartCharge()
         {
-            if (chargeTimer > 0f || stageFlow.Phase == StageFlowPhase.BossReady) return;
+            // BossReady is still an idle-hunting state. Reaching 100/100 must not
+            // disable the player's normal passive while farming continues.
+            if (chargeTimer > 0f) return;
 
             IList enemies = enemiesField?.GetValue(arena) as IList;
             if (enemies == null || enemies.Count == 0 || playerPositionField == null) return;

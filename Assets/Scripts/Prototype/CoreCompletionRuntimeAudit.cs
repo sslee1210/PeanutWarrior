@@ -20,7 +20,7 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            for (int i = 0; i < 15; i++) yield return null;
+            for (int i = 0; i < 18; i++) yield return null;
 
             var errors = new List<string>();
             RequireSingle<AdvancementProgressionPrototype>(errors);
@@ -28,8 +28,13 @@ namespace PeanutWarrior.Prototype
             RequireSingle<GameSettingsPrototype>(errors);
             RequireSingle<PeanutSaveGameService>(errors);
             RequireSingle<OfflineProgressRewardPrototype>(errors);
+            RequireSingle<OfflineRewardPopupPrototype>(errors);
             RequireSingle<CoreShopProgressionPrototype>(errors);
             RequireSingle<PeanutCoreMenuCompletionV3>(errors);
+            RequireSingle<AdvancementWorldViewPrototype>(errors);
+            RequireSingle<MiniPeanutWorldViewPrototype>(errors);
+            RequireSingle<SaveLoadBattlefieldSync>(errors);
+            RequireSingle<IdleFirstRunDefaults>(errors);
 
             if (PeanutGameRules.RequiredKillsPerStage != 100)
                 errors.Add("Required kills must remain 100.");
@@ -37,6 +42,8 @@ namespace PeanutWarrior.Prototype
                 errors.Add("Stages per world must remain 30.");
             if (PeanutGameRules.BossTimeLimitSeconds != 45)
                 errors.Add("Boss time limit must remain 45 seconds.");
+            if (PeanutGameRules.MaxOfflineHours != 8)
+                errors.Add("Offline reward cap must remain eight hours.");
             if (PeanutGameRules.AdvancementCount != 8)
                 errors.Add("Expected eight advancement definitions.");
             if (string.IsNullOrEmpty(PeanutGameRules.GetWorldName(1)) || string.IsNullOrEmpty(PeanutGameRules.GetBossName(1)))
@@ -89,6 +96,14 @@ namespace PeanutWarrior.Prototype
                     errors.Add("Skill and equipment pages must remain untouched.");
             }
 
+            AdvancementWorldViewPrototype advancementView = FindFirstObjectByType<AdvancementWorldViewPrototype>();
+            if (advancementView != null && advancement != null && advancementView.AppliedTier != advancement.Tier)
+                errors.Add("Advancement world view is not synchronized with the current tier.");
+
+            MiniPeanutWorldViewPrototype petView = FindFirstObjectByType<MiniPeanutWorldViewPrototype>();
+            if (petView != null && pets != null && pets.IsUnlocked && petView.VisiblePetCount != 3)
+                errors.Add("All three unlocked pets should be visible in the battlefield.");
+
             MethodInfo offlineGrant = typeof(GrowthExpansionPrototype).GetMethod(
                 "GrantOfflineProgress", BindingFlags.Instance | BindingFlags.Public);
             if (offlineGrant == null) errors.Add("Growth offline reward entry point is missing.");
@@ -97,7 +112,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · advancement, pets, stage rules, idle boss, growth, offline rewards, shop, settings, JSON save and core menu V3 are active. SKILL and equipment remain intentionally deferred.");
+                    "PASS · advancement, pets, stage rules, idle boss, growth, offline rewards and popup, shop, settings, JSON save, battlefield sync, completed visuals and core menu V3 are active. SKILL and equipment remain intentionally deferred.");
                 yield break;
             }
 

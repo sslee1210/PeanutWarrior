@@ -102,14 +102,14 @@ namespace PeanutWarrior.Prototype
             GUILayout.Space(8f);
             GUILayout.Label("사망·클리어 규칙 테스트");
 
-            GUI.enabled = stageFlow.Phase != BattlePhase.BossBattle;
+            GUI.enabled = stageFlow.Phase != StageFlowPhase.BossBattle;
             if (GUILayout.Button("사냥 중 사망"))
             {
                 stageFlow.HandleHuntingDeath();
             }
             GUI.enabled = true;
 
-            GUI.enabled = stageFlow.Phase == BattlePhase.BossBattle;
+            GUI.enabled = stageFlow.Phase == StageFlowPhase.BossBattle;
             if (GUILayout.Button("보스전 사망"))
             {
                 stageFlow.HandleBossBattleDeath();
@@ -134,13 +134,13 @@ namespace PeanutWarrior.Prototype
             GUILayout.EndArea();
         }
 
-        private static string GetPhaseLabel(BattlePhase phase)
+        private static string GetPhaseLabel(StageFlowPhase phase)
         {
             return phase switch
             {
-                BattlePhase.Hunting => "일반 사냥",
-                BattlePhase.BossReady => "보스 도전 가능",
-                BattlePhase.BossBattle => "보스전",
+                StageFlowPhase.Hunting => "일반 사냥",
+                StageFlowPhase.BossReady => "보스 도전 가능",
+                StageFlowPhase.BossBattle => "보스전",
                 _ => phase.ToString()
             };
         }

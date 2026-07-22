@@ -153,6 +153,12 @@ namespace PeanutWarrior.Core
 
         public void SelectStage(int targetWorld, int targetStage)
         {
+            if (phase == StageFlowPhase.BossBattle)
+            {
+                Debug.LogWarning("Cannot select another stage during an active boss battle.");
+                return;
+            }
+
             if (targetWorld < 1 || targetStage < 1 || targetStage > StagesPerWorld)
             {
                 Debug.LogWarning($"Invalid stage selection: {targetWorld}-{targetStage}");

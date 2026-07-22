@@ -14,7 +14,7 @@
 PASS · core combat, simplified progression, Canvas UI, save integrity and reflection bindings are valid.
 
 [PeanutWarrior Feature Audit]
-PASS · simplified Canvas, stage map, first-clear rewards, save integrity, pooled effects and core progression are active.
+PASS · simplified Canvas, stage map/reset, visible minis, first-clear rewards, save integrity, offline correction, pooled effects and core progression are active.
 ```
 
 ## 2. 현재 메뉴 구조
@@ -41,7 +41,7 @@ PASS · simplified Canvas, stage map, first-clear rewards, save integrity, poole
 - 상점
 - 설정
 
-`껍질 단련`, `속성 연구`, `방치 효율`, 도움말, 소식처럼 현재 플레이에 직접 필요하지 않은 별도 메뉴는 삭제했다. 방치 보상은 별도 성장 메뉴가 아니라 게임의 기본 기능으로만 유지한다.
+`껍질 단련`, `속성 연구`, `방치 효율`, 도움말, 소식처럼 현재 플레이에 직접 필요하지 않은 별도 메뉴는 삭제했다. 방치 보상은 별도 성장 메뉴가 아니라 게임의 기본 기능으로만 유지한다. 이전 IMGUI 모바일 메뉴 구현도 제거하고 호환 마커만 남겼다.
 
 ## 3. 메인 전투 확인
 
@@ -65,6 +65,7 @@ PASS · simplified Canvas, stage map, first-clear rewards, save integrity, poole
 - 위험 범위가 공격 전에 보이는가
 - 광폭화 상태가 표시되는가
 - 월드와 스테이지가 높아지면 패턴 간격과 피해가 완만하게 증가하는가
+- 균왕전 중 다른 스테이지 선택이 차단되는가
 - 사망 시 현재 스테이지 0/100으로 복귀하는가
 - 승리 시 다음 스테이지로 이동하는가
 
@@ -87,15 +88,17 @@ PASS · simplified Canvas, stage map, first-clear rewards, save integrity, poole
 - 해금된 월드만 이전·다음 월드로 이동할 수 있는가
 - 각 월드의 1~30 스테이지가 격자로 표시되는가
 - 미해금 스테이지 버튼이 비활성화되는가
-- 이미 해금한 스테이지를 선택하면 처치 수가 0/100으로 초기화되고 이동하는가
+- 이미 해금한 다른 스테이지를 선택하면 전투장과 처치 수가 함께 초기화되는가
 - 첫 균왕 클리어 시 골드·조각·다이아 최초 보상이 한 번만 지급되는가
 - 동일 스테이지 반복 클리어 시 최초 보상이 중복 지급되지 않는가
 - 최초 클리어 결과가 화면 토스트로 표시되는가
 
 ## 7. 미니·임무·상점 확인
 
-- 미니 3마리가 독립 이동 및 자동 공격하는가
+- 2차 전직 후 미니 3마리가 실제 2D 월드에 표시되는가
+- 미니가 독립 이동 및 자동 공격하는가
 - 미니는 사망하거나 공격 대상이 되지 않는가
+- 미니 이동 시 속성별 색상과 짧은 잔상이 표시되는가
 - 알 구매와 60초 부화가 작동하는가
 - 처치·스테이지·성장 보상이 중복 지급되지 않는가
 - 오늘의 보급은 하루 한 번만 지급되는가
@@ -109,6 +112,7 @@ PASS · simplified Canvas, stage map, first-clear rewards, save integrity, poole
 - 저장 스키마 버전이 2로 기록되는가
 - 30초마다 핵심 진행 데이터의 JSON 백업 스냅샷이 생성되는가
 - 30초 이상 종료 후 기본 오프라인 골드·조각이 지급되는가
+- 최고 해금 스테이지와 현재 전투력에 따른 추가 방치 보정이 한 번만 지급되는가
 
 ## 9. Unity 메뉴 도구
 

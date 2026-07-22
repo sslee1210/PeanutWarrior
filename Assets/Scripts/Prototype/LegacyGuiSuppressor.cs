@@ -6,10 +6,10 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Removes the old prototype IMGUI panels once the consolidated mobile UI is active.
-    /// Legacy components are disabled so Unity no longer calls their OnGUI methods, while
-    /// their Update/FixedUpdate/LateUpdate logic is forwarded manually to keep combat,
-    /// progression, saving, effects and the runtime world view working.
+    /// Removes old prototype IMGUI panels once the consolidated mobile UI is active.
+    /// Components that own gameplay logic are disabled and their lifecycle methods are
+    /// forwarded manually. The runtime world renderer stays enabled because it owns the
+    /// visible battlefield and must continue running normally.
     /// </summary>
     [DefaultExecutionOrder(32000)]
     public sealed class LegacyGuiSuppressor : MonoBehaviour
@@ -89,7 +89,7 @@ namespace PeanutWarrior.Prototype
             for (int i = 0; i < behaviours.Length; i++)
             {
                 MonoBehaviour behaviour = behaviours[i];
-                if (behaviour == null || behaviour == this || behaviour is MobileIdleUiPrototype) continue;
+                if (behaviour == null || ShouldRemainEnabled(behaviour)) continue;
                 if (!behaviour.enabled || IsAlreadySuppressed(behaviour)) continue;
 
                 Type type = behaviour.GetType();
@@ -112,6 +112,13 @@ namespace PeanutWarrior.Prototype
                 suppressed.Add(entry);
                 behaviour.enabled = false;
             }
+        }
+
+        private bool ShouldRemainEnabled(MonoBehaviour behaviour)
+        {
+            return behaviour == this ||
+                   behaviour is MobileIdleUiPrototype ||
+                   behaviour is RuntimeWorldViewPrototype;
         }
 
         private bool IsAlreadySuppressed(MonoBehaviour behaviour)

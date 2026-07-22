@@ -12,7 +12,8 @@ namespace PeanutWarrior.Core
 
     /// <summary>
     /// Controls the core idle-RPG loop:
-    /// hunt 100 monsters, challenge a boss, and advance stages.
+    /// hunt 100 monsters, keep farming while the boss is available,
+    /// challenge the boss manually or automatically, and advance stages.
     /// </summary>
     public sealed class StageFlowController : MonoBehaviour
     {
@@ -31,7 +32,7 @@ namespace PeanutWarrior.Core
         public int MonsterKills => monsterKills;
         public bool AutoChallenge => autoChallenge;
         public StageFlowPhase Phase => phase;
-        public bool CanChallengeBoss => phase == StageFlowPhase.BossReady;
+        public bool CanChallengeBoss => phase != StageFlowPhase.BossBattle && monsterKills >= RequiredKills;
 
         public event Action StateChanged;
         public event Action BossBattleStarted;
@@ -44,7 +45,7 @@ namespace PeanutWarrior.Core
             autoChallenge = enabled;
             NotifyChanged();
 
-            if (enabled && phase == StageFlowPhase.BossReady)
+            if (enabled && CanChallengeBoss)
             {
                 StartBossBattle();
             }
@@ -52,16 +53,19 @@ namespace PeanutWarrior.Core
 
         public void RegisterMonsterKill(int count = 1)
         {
-            if (phase != StageFlowPhase.Hunting || count <= 0)
+            if (phase == StageFlowPhase.BossBattle || count <= 0)
             {
                 return;
             }
 
+            int previousKills = monsterKills;
             monsterKills = Mathf.Min(RequiredKills, monsterKills + count);
 
-            if (monsterKills >= RequiredKills)
+            // Reaching 100 unlocks the boss but does not stop idle farming.
+            // The counter remains at 100 while additional monsters continue
+            // providing gold, fragments, and other normal hunting rewards.
+            if (previousKills < RequiredKills && monsterKills >= RequiredKills)
             {
-                phase = StageFlowPhase.BossReady;
                 NotifyChanged();
 
                 if (autoChallenge)
@@ -77,7 +81,7 @@ namespace PeanutWarrior.Core
 
         public void StartBossBattle()
         {
-            if (phase != StageFlowPhase.BossReady)
+            if (!CanChallengeBoss)
             {
                 return;
             }

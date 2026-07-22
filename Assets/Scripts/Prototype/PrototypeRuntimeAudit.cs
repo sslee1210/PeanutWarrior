@@ -42,6 +42,7 @@ namespace PeanutWarrior.Prototype
             RequireSingle<CombatIntegrationPrototype>(errors);
             RequireSingle<LoadoutBonusCombatPrototype>(errors);
             RequireSingle<BossPatternPrototype>(errors);
+            RequireSingle<BossPatternWorldViewPrototype>(errors);
             RequireSingle<RuntimeWorldViewPrototype>(errors);
             RequireSingle<PeanutMobileCanvasPrototype>(errors);
             RequireSingle<PeanutCanvasLayoutGuard>(errors);
@@ -50,6 +51,7 @@ namespace PeanutWarrior.Prototype
             RequireSingle<IdleSystemsPrototype>(errors);
             RequireSingle<PrototypeShopAndDaily>(errors);
             RequireSingle<SkillManagementPrototype>(errors);
+            RequireSingle<GlobalSkillAutoGatePrototype>(errors);
             RequireSingle<GrowthExpansionPrototype>(errors);
             RequireSingle<SwordProgressionPrototype>(errors);
             RequireSingle<FirstClearRewardPrototype>(errors);
@@ -64,6 +66,7 @@ namespace PeanutWarrior.Prototype
             AuditSwords(errors);
             AuditIdle(errors);
             AuditShop(errors);
+            AuditBoss(errors);
             AuditWorld(errors, warnings);
             AuditCanvas(errors, warnings);
             AuditSaveIntegrity(errors);
@@ -73,7 +76,7 @@ namespace PeanutWarrior.Prototype
             var report = new StringBuilder();
             report.AppendLine("[PeanutWarrior Runtime Audit]");
             if (errors.Count == 0)
-                report.AppendLine("PASS · core combat, simplified progression, Canvas UI, save integrity and reflection bindings are valid.");
+                report.AppendLine("PASS · core idle combat, six-tab Canvas UI, global skill AUTO, final ten-stat growth and save bindings are valid.");
             else
             {
                 report.AppendLine($"FAIL · {errors.Count} blocking issue(s)");
@@ -107,7 +110,10 @@ namespace PeanutWarrior.Prototype
                 "advancementTier", "playerAttackCooldown", "lifetimeKills", "attackLevel", "hpLevel",
                 "maxMpLevel", "mpRegenLevel", "basicAttackLevel"
             }, PrivateInstance, errors);
-            RequireProperties(type, new[] { "PlayerMaxHp", "PlayerMaxMp", "PlayerAttackDamage", "CombatPower" }, PrivateInstance, errors);
+            RequireProperties(type, new[]
+            {
+                "PlayerMaxHp", "PlayerMaxMp", "PlayerMpRegen", "PlayerAttackDamage", "CombatPower"
+            }, PrivateInstance, errors);
             RequireMethods(type, new[] { "DealDamage", "SpawnNormalEnemy", "FullRestore", "TryAdvance" }, PrivateInstance, errors);
 
             CombatPrototypeArena arena = FindFirstObjectByType<CombatPrototypeArena>();
@@ -121,10 +127,8 @@ namespace PeanutWarrior.Prototype
             if (enemies == null) errors.Add("CombatPrototypeArena.enemies is not initialized.");
             else if (enemies.Count > 40) warnings.Add($"Unexpected active enemy count: {enemies.Count}");
 
-            float hp = ReadPropertyFloat(type, arena, "PlayerMaxHp");
-            float mp = ReadPropertyFloat(type, arena, "PlayerMaxMp");
-            if (hp <= 0f) errors.Add("PlayerMaxHp resolved to zero or less.");
-            if (mp <= 0f) errors.Add("PlayerMaxMp resolved to zero or less.");
+            if (ReadPropertyFloat(type, arena, "PlayerMaxHp") <= 0f) errors.Add("PlayerMaxHp resolved to zero or less.");
+            if (ReadPropertyFloat(type, arena, "PlayerMaxMp") <= 0f) errors.Add("PlayerMaxMp resolved to zero or less.");
         }
 
         private static void AuditStageFlow(List<string> errors)
@@ -139,29 +143,57 @@ namespace PeanutWarrior.Prototype
             if (flow == null) return;
             if (flow.World < 1) errors.Add("StageFlowController.World is below 1.");
             if (flow.Stage < 1 || flow.Stage > StageFlowController.StagesPerWorld) errors.Add($"Invalid stage: {flow.Stage}");
-            if (flow.MonsterKills < 0 || flow.MonsterKills > StageFlowController.RequiredKills) errors.Add($"Invalid kill counter: {flow.MonsterKills}");
+            if (flow.MonsterKills < 0 || flow.MonsterKills > StageFlowController.RequiredKills)
+                errors.Add($"Invalid kill counter: {flow.MonsterKills}");
         }
 
         private static void AuditGrowth(List<string> errors)
         {
             Type type = typeof(GrowthExpansionPrototype);
-            RequireFields(type, new[] { "critChanceLevel", "critDamageLevel", "goldGainLevel", "hpRegenLevel" }, PrivateInstance, errors);
+            RequireFields(type, new[]
+            {
+                "critChanceLevel", "critDamageLevel", "goldGainLevel", "hpRegenLevel",
+                "expGainLevel", "equipmentGainLevel"
+            }, PrivateInstance, errors);
             RequireProperties(type, new[] { "CritChance", "CritDamage" }, PrivateInstance, errors);
+            RequireProperties(type, new[]
+            {
+                "CriticalChance", "CriticalDamageMultiplier", "ExperienceMultiplier",
+                "EquipmentMaterialMultiplier", "PlayerLevel", "EquipmentEnhancementMaterials"
+            }, PublicInstance, errors);
+
+            GrowthExpansionPrototype growth = FindFirstObjectByType<GrowthExpansionPrototype>();
+            if (growth != null && (growth.CriticalChance < 0f || growth.CriticalChance > 1.0001f))
+                errors.Add("Critical chance must remain between 0% and 100%.");
         }
 
         private static void AuditSkills(List<string> errors)
         {
             Type type = typeof(SkillManagementPrototype);
-            RequireFields(type, new[] { "autoEnabled" }, PrivateInstance, errors);
+            RequireFields(type, new[] { "autoEnabled", "globalAutoEnabled" }, PrivateInstance, errors);
+            RequireMethods(type, new[] { "ToggleGlobalAuto", "SetGlobalAuto", "UpgradeSkill" }, PublicInstance, errors);
+            RequireProperties(type, new[] { "GlobalAutoEnabled", "SkillLevels", "Cooldowns" }, PublicInstance, errors);
+
             SkillManagementPrototype manager = FindFirstObjectByType<SkillManagementPrototype>();
             bool[] values = manager == null ? null : type.GetField("autoEnabled", PrivateInstance)?.GetValue(manager) as bool[];
-            if (values == null || values.Length != 8) errors.Add("Skill auto-use array must contain 8 entries.");
+            if (values == null || values.Length != 8) errors.Add("Compatibility skill auto array must contain 8 entries.");
+            if (manager != null && values != null)
+            {
+                for (int i = 0; i < values.Length; i++)
+                    if (values[i] != manager.GlobalAutoEnabled)
+                        errors.Add("Every compatibility auto flag must mirror the global AUTO state.");
+            }
         }
 
         private static void AuditSwords(List<string> errors)
         {
             Type type = typeof(SwordProgressionPrototype);
             RequireMethods(type, new[] { "RegisterSummon", "UpgradeSword", "ManualSynthesize", "GetDamageMultiplier" }, PublicInstance, errors);
+            if ((int)SwordProgressionPrototype.SwordRarity.Rare != 1 ||
+                (int)SwordProgressionPrototype.SwordRarity.Epic != 2 ||
+                (int)SwordProgressionPrototype.SwordRarity.Unique != 3 ||
+                (int)SwordProgressionPrototype.SwordRarity.Legend != 4)
+                errors.Add("Sword grade order must be Rare → Epic → Unique → Legend.");
         }
 
         private static void AuditIdle(List<string> errors)
@@ -172,15 +204,20 @@ namespace PeanutWarrior.Prototype
                 "miniAttackLevel", "miniCritLevel", "miniCritDamageLevel", "eggs", "hatchedMinis",
                 "incubating", "incubationRemaining", "systemMessage"
             }, PrivateInstance, errors);
-            RequireMethods(type, new[]
-            {
-                "BuyEgg", "StartIncubation", "ClaimKillMission", "ClaimStageMission", "ClaimGrowthAchievement"
-            }, PrivateInstance, errors);
+            RequireMethods(type, new[] { "BuyEgg", "StartIncubation" }, PrivateInstance, errors);
         }
 
         private static void AuditShop(List<string> errors)
         {
             RequireMethods(typeof(PrototypeShopAndDaily), new[] { "ClaimDailyReward", "SummonSword", "BuyEgg" }, PrivateInstance, errors);
+        }
+
+        private static void AuditBoss(List<string> errors)
+        {
+            Type type = typeof(BossPatternPrototype);
+            RequireProperties(type, new[] { "RemainingTime", "PatternName", "EncounterActive" }, PublicInstance, errors);
+            if (type.GetField("warningTimer", PrivateInstance) != null || type.GetField("warningCenter", PrivateInstance) != null)
+                errors.Add("Manual dodge warning fields should not exist in the idle boss controller.");
         }
 
         private static void AuditWorld(List<string> errors, List<string> warnings)
@@ -201,8 +238,10 @@ namespace PeanutWarrior.Prototype
             PeanutMobileCanvasPrototype ui = FindFirstObjectByType<PeanutMobileCanvasPrototype>();
             if (ui == null) return;
             if (!ui.enabled) errors.Add("PeanutMobileCanvasPrototype is disabled.");
-            if (!ui.UsesSimplifiedGrowthMenu) errors.Add("Simplified growth menu flag is disabled.");
-            if (ui.BottomMenuCount != 7) errors.Add($"Expected 7 bottom menus, found {ui.BottomMenuCount}.");
+            if (!ui.UsesSimplifiedGrowthMenu) errors.Add("Final growth menu flag is disabled.");
+            if (!ui.UsesGlobalSkillAuto) errors.Add("Global skill AUTO flag is disabled.");
+            if (!ui.HasTopStageSelector) errors.Add("Top stage selector flag is disabled.");
+            if (ui.BottomMenuCount != 6) errors.Add($"Expected 6 bottom menus, found {ui.BottomMenuCount}.");
             Canvas runtimeCanvas = ui.GetComponentInChildren<Canvas>(true);
             if (runtimeCanvas == null) errors.Add("Mobile Canvas was not built.");
             else if (!runtimeCanvas.gameObject.activeInHierarchy) errors.Add("Mobile Canvas is inactive.");

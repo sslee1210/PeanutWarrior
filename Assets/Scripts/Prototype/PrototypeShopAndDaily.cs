@@ -26,7 +26,6 @@ namespace PeanutWarrior.Prototype
         private int totalSwordSummons;
         private string lastClaimDate = string.Empty;
         private string shopMessage = "일일 보상·소환 준비";
-        private bool panelOpen;
 
         public string ShopMessage => shopMessage;
         public int DailyStreak => dailyStreak;
@@ -132,7 +131,7 @@ namespace PeanutWarrior.Prototype
             {
                 int level = Convert.ToInt32(basicAttackLevelField.GetValue(arena));
                 basicAttackLevelField.SetValue(arena, level + 1);
-                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 검 도감으로 기본 공격 강화";
+                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 장비 도감으로 기본 공격 강화";
             }
             else
             {
@@ -145,17 +144,17 @@ namespace PeanutWarrior.Prototype
         {
             if (idleSystems == null || eggsField == null)
             {
-                shopMessage = "미니 시스템 초기화 대기";
+                shopMessage = "펫 시스템 초기화 대기";
                 return;
             }
             if (!SpendDiamonds(3))
             {
-                shopMessage = "알 구매에 다이아 3개 필요";
+                shopMessage = "펫 알 구매에 다이아 3개 필요";
                 return;
             }
             int eggs = Convert.ToInt32(eggsField.GetValue(idleSystems));
             eggsField.SetValue(idleSystems, eggs + 1);
-            shopMessage = "미니 알 구매 완료 · 미니 패널에서 부화";
+            shopMessage = "펫 알 구매 완료 · 펫 화면에서 부화";
             Save();
         }
 
@@ -178,31 +177,14 @@ namespace PeanutWarrior.Prototype
                 swordCopies[i] = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "SwordCopies" + i, 0));
         }
 
-        private void OnApplicationPause(bool paused) { if (paused) Save(); }
-        private void OnApplicationQuit() => Save();
-
-        private void OnGUI()
+        private void OnApplicationPause(bool paused)
         {
-            float buttonWidth = 118f;
-            Rect toggle = new Rect(Screen.width - buttonWidth - 15f, 15f, buttonWidth, 36f);
-            if (GUI.Button(toggle, panelOpen ? "상점 닫기" : "상점·보상")) panelOpen = !panelOpen;
-            if (!panelOpen) return;
+            if (paused) Save();
+        }
 
-            float width = Mathf.Min(300f, Screen.width - 30f);
-            float x = Mathf.Clamp(Screen.width - width - 15f, 15f, Screen.width - width - 15f);
-            Rect panel = new Rect(x, 58f, width, 242f);
-            GUI.Box(panel, "접속 보상·소환 상점");
-            GUI.Label(new Rect(panel.x + 12f, panel.y + 28f, panel.width - 24f, 42f), shopMessage);
-            GUI.Label(new Rect(panel.x + 12f, panel.y + 70f, panel.width - 24f, 22f),
-                $"연속 접속 {dailyStreak}일 · 검 소환 {totalSwordSummons}회 · 다이아 {Diamonds}");
-
-            if (GUI.Button(new Rect(panel.x + 12f, panel.y + 96f, panel.width - 24f, 34f), "오늘의 접속 보상 받기")) ClaimDailyReward();
-            float half = (panel.width - 30f) * 0.5f;
-            if (GUI.Button(new Rect(panel.x + 12f, panel.y + 136f, half, 38f), "사냥 검 소환\n5◆")) SummonSword(false);
-            if (GUI.Button(new Rect(panel.x + 18f + half, panel.y + 136f, half, 38f), "균왕 검 소환\n5◆")) SummonSword(true);
-            if (GUI.Button(new Rect(panel.x + 12f, panel.y + 180f, panel.width - 24f, 34f), "미니 알 구매 · 3◆")) BuyEgg();
-            GUI.Label(new Rect(panel.x + 12f, panel.y + 218f, panel.width - 24f, 18f),
-                $"검 도감: 무{swordCopies[0]} 화{swordCopies[1]} 빙{swordCopies[2]} 뇌{swordCopies[3]}");
+        private void OnApplicationQuit()
+        {
+            Save();
         }
 
         private static string ElementName(int index)
@@ -212,7 +194,7 @@ namespace PeanutWarrior.Prototype
 
         private static string RarityName(int rarity)
         {
-            return rarity switch { 4 => "신화", 3 => "전설", 2 => "희귀", _ => "일반" };
+            return rarity switch { 4 => "레전드", 3 => "유니크", 2 => "에픽", _ => "레어" };
         }
     }
 }

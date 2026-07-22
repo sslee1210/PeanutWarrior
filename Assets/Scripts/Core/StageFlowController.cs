@@ -1,0 +1,227 @@
+using System;
+using UnityEngine;
+
+namespace PeanutWarrior.Core
+{
+    public enum BattlePhase
+    {
+        Hunting,
+        BossReady,
+        BossBattle
+    }
+
+    /// <summary>
+    /// Controls the core idle-RPG loop:
+    /// hunt 100 monsters, challenge a boss, and advance stages.
+    /// </summary>
+    public sealed class StageFlowController : MonoBehaviour
+    {
+        public const int RequiredKills = 100;
+        public const int StagesPerWorld = 30;
+
+        [Header("Progress")]
+        [SerializeField, Min(1)] private int world = 1;
+        [SerializeField, Range(1, StagesPerWorld)] private int stage = 1;
+        [SerializeField, Range(0, RequiredKills)] private int monsterKills;
+        [SerializeField] private bool autoChallenge;
+        [SerializeField] private BattlePhase phase = BattlePhase.Hunting;
+
+        public int World => world;
+        public int Stage => stage;
+        public int MonsterKills => monsterKills;
+        public bool AutoChallenge => autoChallenge;
+        public BattlePhase Phase => phase;
+        public bool CanChallengeBoss => phase == BattlePhase.BossReady;
+
+        public event Action StateChanged;
+        public event Action BossBattleStarted;
+        public event Action BossBattleFailed;
+        public event Action BossDefeated;
+        public event Action HuntingDeath;
+
+        public void SetAutoChallenge(bool enabled)
+        {
+            autoChallenge = enabled;
+            NotifyChanged();
+
+            if (enabled && phase == BattlePhase.BossReady)
+            {
+                StartBossBattle();
+            }
+        }
+
+        public void RegisterMonsterKill(int count = 1)
+        {
+            if (phase != BattlePhase.Hunting || count <= 0)
+            {
+                return;
+            }
+
+            monsterKills = Mathf.Min(RequiredKills, monsterKills + count);
+
+            if (monsterKills >= RequiredKills)
+            {
+                phase = BattlePhase.BossReady;
+                NotifyChanged();
+
+                if (autoChallenge)
+                {
+                    StartBossBattle();
+                }
+
+                return;
+            }
+
+            NotifyChanged();
+        }
+
+        /// <summary>
+        /// Called by either the boss challenge button or auto challenge.
+        /// The player/battle system should fully restore HP and MP when
+        /// BossBattleStarted is raised.
+        /// </summary>
+        public void StartBossBattle()
+        {
+            if (phase != BattlePhase.BossReady)
+            {
+                return;
+            }
+
+            phase = BattlePhase.BossBattle;
+            BossBattleStarted?.Invoke();
+            NotifyChanged();
+        }
+
+        /// <summary>
+        /// Boss death rule: remain on the current stage, disable auto challenge,
+        /// reset progress to 0/100, and return to hunting.
+        /// </summary>
+        public void HandleBossBattleDeath()
+        {
+            if (phase != BattlePhase.BossBattle)
+            {
+                return;
+            }
+
+            autoChallenge = false;
+            monsterKills = 0;
+            phase = BattlePhase.Hunting;
+
+            BossBattleFailed?.Invoke();
+            NotifyChanged();
+        }
+
+        /// <summary>
+        /// Hunting death rule: disable auto challenge and move to the immediately
+        /// previous stage. Stage 1-1 remains at 1-1.
+        /// </summary>
+        public void HandleHuntingDeath()
+        {
+            if (phase == BattlePhase.BossBattle)
+            {
+                return;
+            }
+
+            autoChallenge = false;
+            MoveToPreviousStage();
+            monsterKills = 0;
+            phase = BattlePhase.Hunting;
+
+            HuntingDeath?.Invoke();
+            NotifyChanged();
+        }
+
+        public void HandleBossDefeated()
+        {
+            if (phase != BattlePhase.BossBattle)
+            {
+                return;
+            }
+
+            BossDefeated?.Invoke();
+
+            if (autoChallenge)
+            {
+                MoveToNextStage();
+            }
+
+            monsterKills = 0;
+            phase = BattlePhase.Hunting;
+            NotifyChanged();
+        }
+
+        public void SelectStage(int targetWorld, int targetStage)
+        {
+            if (targetWorld < 1 || targetStage < 1 || targetStage > StagesPerWorld)
+            {
+                Debug.LogWarning($"Invalid stage selection: {targetWorld}-{targetStage}");
+                return;
+            }
+
+            world = targetWorld;
+            stage = targetStage;
+            monsterKills = 0;
+            phase = BattlePhase.Hunting;
+            NotifyChanged();
+        }
+
+        public string GetWorldDisplayName()
+        {
+            string[] baseWorldNames =
+            {
+                "땅콩밭 침공",
+                "곰팡이 창고",
+                "포식자의 숲",
+                "얼어붙은 저장고",
+                "불타는 이세계",
+                "차원 균열 중심부"
+            };
+
+            int baseIndex = (world - 1) % baseWorldNames.Length;
+            int enhancementTier = (world - 1) / baseWorldNames.Length;
+
+            if (enhancementTier == 0)
+            {
+                return baseWorldNames[baseIndex];
+            }
+
+            return enhancementTier == 1
+                ? $"강화된 {baseWorldNames[baseIndex]}"
+                : $"강화된 {enhancementTier}단계 {baseWorldNames[baseIndex]}";
+        }
+
+        private void MoveToNextStage()
+        {
+            stage++;
+            if (stage <= StagesPerWorld)
+            {
+                return;
+            }
+
+            stage = 1;
+            world++;
+        }
+
+        private void MoveToPreviousStage()
+        {
+            if (world == 1 && stage == 1)
+            {
+                return;
+            }
+
+            stage--;
+            if (stage >= 1)
+            {
+                return;
+            }
+
+            world--;
+            stage = StagesPerWorld;
+        }
+
+        private void NotifyChanged()
+        {
+            StateChanged?.Invoke();
+        }
+    }
+}

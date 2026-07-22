@@ -7,9 +7,8 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Applies a distinct visual identity to each authored world without requiring
-    /// external art assets. It updates the runtime field, monster labels and boss
-    /// names while preserving the existing combat model.
+    /// Gives each authored world a distinct temporary visual identity until final art
+    /// assets replace the runtime shapes.
     /// </summary>
     [DefaultExecutionOrder(17000)]
     public sealed class WorldThemePrototype : MonoBehaviour
@@ -24,13 +23,9 @@ namespace PeanutWarrior.Prototype
             new[] { "숲쥐", "껍질사냥꾼", "덩굴포식충", "송곳니버섯" },
             new[] { "서리바구미", "얼음균사", "냉기포자", "빙결포식충" },
             new[] { "화염나방", "불씨곰팡이", "용암껍질충", "재포자" },
+            new[] { "폭풍참새", "번개포자", "구름껍질충", "공중사냥꾼" },
+            new[] { "황금도둑쥐", "왕국감시병", "보석포자", "갑주바구미" },
             new[] { "차원기생체", "균열감시자", "공허포자", "이세계포식자" }
-        };
-
-        private static readonly string[] BossNames =
-        {
-            "땅콩밭 보스", "창고 포자군주", "포식자의 우두머리",
-            "빙결 저장고 군주", "화염 차원의 침략자", "균열 중심체"
         };
 
         private static readonly Color[] FloorColors =
@@ -40,6 +35,8 @@ namespace PeanutWarrior.Prototype
             new Color(0.29f, 0.52f, 0.28f),
             new Color(0.40f, 0.66f, 0.72f),
             new Color(0.68f, 0.34f, 0.20f),
+            new Color(0.45f, 0.62f, 0.76f),
+            new Color(0.74f, 0.62f, 0.24f),
             new Color(0.35f, 0.27f, 0.55f)
         };
 
@@ -50,6 +47,8 @@ namespace PeanutWarrior.Prototype
             new Color(0.18f, 0.40f, 0.20f, 0.62f),
             new Color(0.64f, 0.88f, 0.94f, 0.62f),
             new Color(0.96f, 0.54f, 0.18f, 0.62f),
+            new Color(0.76f, 0.86f, 0.96f, 0.62f),
+            new Color(0.96f, 0.80f, 0.30f, 0.62f),
             new Color(0.64f, 0.35f, 0.82f, 0.62f)
         };
 
@@ -118,14 +117,12 @@ namespace PeanutWarrior.Prototype
 
                     SpriteRenderer[] renderers = worldRoot.GetComponentsInChildren<SpriteRenderer>(true);
                     for (int i = 0; i < renderers.Length; i++)
-                    {
                         if (renderers[i].gameObject.name == "Field Patch")
                             renderers[i].color = PatchColors[theme];
-                    }
                 }
 
                 Camera camera = cameraField?.GetValue(worldView) as Camera;
-                if (camera != null) camera.backgroundColor = Color.Lerp(FloorColors[theme], Color.black, 0.28f);
+                if (camera != null) camera.backgroundColor = Color.Lerp(FloorColors[theme], Color.black, 0.22f);
             }
             ApplyUnitNames();
         }
@@ -146,7 +143,7 @@ namespace PeanutWarrior.Prototype
                 if (label != null)
                 {
                     int nameIndex = Mathf.Abs(entry.Key.GetHashCode()) % MonsterNames[theme].Length;
-                    label.text = isBoss ? BossNames[theme] : MonsterNames[theme][nameIndex];
+                    label.text = isBoss ? stageFlow.GetBossDisplayName() : MonsterNames[theme][nameIndex];
                 }
                 if (body != null && isBoss)
                     body.color = Color.Lerp(FloorColors[theme], new Color(0.75f, 0.10f, 0.12f), 0.72f);
@@ -157,8 +154,7 @@ namespace PeanutWarrior.Prototype
 
         public string CurrentThemeDescription()
         {
-            int theme = ThemeIndex;
-            return $"{stageFlow.GetWorldDisplayName()} · 보스 {BossNames[theme]}";
+            return $"{stageFlow.GetWorldDisplayName()} · 보스 {stageFlow.GetBossDisplayName()}";
         }
 
         private static Transform FindDeepChild(Transform parent, string name)

@@ -122,7 +122,7 @@ namespace PeanutWarrior.Prototype
             if (bonusGold > 0 && goldField != null) goldField.SetValue(arena, Gold + bonusGold);
 
             long baseExperience = Mathf.RoundToInt(gainedKills * (4f + globalStage * 0.35f));
-            AddExperience(Mathf.Max(1L, (long)Math.Round(baseExperience * ExperienceMultiplier)));
+            AddExperience(Math.Max(1L, (long)Math.Round(baseExperience * ExperienceMultiplier)));
 
             equipmentMaterialProgress += gainedKills * 0.08f * EquipmentMaterialMultiplier;
             ConvertMaterialProgress();
@@ -132,11 +132,11 @@ namespace PeanutWarrior.Prototype
         {
             int globalStage = GlobalStage;
             long bossExperience = Mathf.RoundToInt((30f + globalStage * 5f) * ExperienceMultiplier);
-            AddExperience(Mathf.Max(1L, bossExperience));
+            AddExperience(Math.Max(1L, bossExperience));
 
             equipmentMaterialProgress += (1f + stageFlow.World * 0.25f) * EquipmentMaterialMultiplier;
             ConvertMaterialProgress();
-            message = $"균왕 보상 · EXP +{bossExperience:N0} · 장비 강화 재료 {equipmentEnhancementMaterials:N0}";
+            message = $"보스 보상 · EXP +{bossExperience:N0} · 장비 강화 재료 {equipmentEnhancementMaterials:N0}";
             Save();
         }
 

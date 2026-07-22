@@ -49,7 +49,6 @@ namespace PeanutWarrior.Prototype
             RequireSingle<PrototypeShopAndDaily>(errors);
             RequireSingle<SkillManagementPrototype>(errors);
             RequireSingle<GrowthExpansionPrototype>(errors);
-            RequireSingle<MetaProgressionPrototype>(errors);
             RequireSingle<SwordProgressionPrototype>(errors);
             RequireSingle<LegacyGuiSuppressor>(errors);
 
@@ -57,7 +56,6 @@ namespace PeanutWarrior.Prototype
             AuditStageFlow(errors);
             AuditGrowth(errors);
             AuditSkills(errors);
-            AuditMeta(errors);
             AuditSwords(errors);
             AuditIdle(errors);
             AuditShop(errors);
@@ -67,7 +65,7 @@ namespace PeanutWarrior.Prototype
             var report = new StringBuilder();
             report.AppendLine("[PeanutWarrior Runtime Audit]");
             if (errors.Count == 0)
-                report.AppendLine("PASS · core combat, progression, Canvas UI and reflection bindings are valid.");
+                report.AppendLine("PASS · core combat, progression, simplified Canvas UI and reflection bindings are valid.");
             else
             {
                 report.AppendLine($"FAIL · {errors.Count} blocking issue(s)");
@@ -152,16 +150,6 @@ namespace PeanutWarrior.Prototype
             if (values == null || values.Length != 8) errors.Add("Skill auto-use array must contain 8 entries.");
         }
 
-        private static void AuditMeta(List<string> errors)
-        {
-            Type type = typeof(MetaProgressionPrototype);
-            RequireMethods(type, new[]
-            {
-                "UpgradeShellVitality", "UpgradeShellRecovery", "UpgradeElementResearch",
-                "UpgradeIdleGold", "UpgradeIdleFragments", "UpgradeIdleHours"
-            }, PublicInstance, errors);
-        }
-
         private static void AuditSwords(List<string> errors)
         {
             Type type = typeof(SwordProgressionPrototype);
@@ -174,7 +162,7 @@ namespace PeanutWarrior.Prototype
             RequireFields(type, new[]
             {
                 "miniAttackLevel", "miniCritLevel", "miniCritDamageLevel", "eggs", "hatchedMinis",
-                "incubating", "incubationRemaining"
+                "incubating", "incubationRemaining", "systemMessage"
             }, PrivateInstance, errors);
             RequireMethods(type, new[]
             {
@@ -205,9 +193,11 @@ namespace PeanutWarrior.Prototype
             PeanutMobileCanvasPrototype ui = FindFirstObjectByType<PeanutMobileCanvasPrototype>();
             if (ui == null) return;
             if (!ui.enabled) errors.Add("PeanutMobileCanvasPrototype is disabled.");
-            Canvas canvas = ui.GetComponentInChildren<Canvas>(true);
-            if (canvas == null) errors.Add("Mobile Canvas was not built.");
-            else if (!canvas.gameObject.activeInHierarchy) errors.Add("Mobile Canvas is inactive.");
+            if (!ui.UsesSimplifiedGrowthMenu) errors.Add("Simplified growth menu flag is disabled.");
+            if (ui.BottomMenuCount != 7) errors.Add($"Expected 7 bottom menus, found {ui.BottomMenuCount}.");
+            Canvas runtimeCanvas = ui.GetComponentInChildren<Canvas>(true);
+            if (runtimeCanvas == null) errors.Add("Mobile Canvas was not built.");
+            else if (!runtimeCanvas.gameObject.activeInHierarchy) errors.Add("Mobile Canvas is inactive.");
             if (FindFirstObjectByType<EventSystem>() == null) errors.Add("No EventSystem exists for Canvas buttons.");
             if (Screen.width < Screen.height) warnings.Add("Current display is portrait; the game is designed for landscape.");
         }

@@ -5,18 +5,19 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Stores the four elemental sword collections independently from the summon UI.
-    /// Duplicate swords automatically synthesize 3-to-1 up to Mythic rarity.
+    /// Stores the four elemental sword collections. Grade order is fixed to
+    /// Rare → Epic → Unique → Legend. The detailed equipment design is intentionally
+    /// kept minimal until the final weapon structure is confirmed.
     /// </summary>
     public sealed class SwordProgressionPrototype : MonoBehaviour
     {
         public enum SwordRarity
         {
             None = 0,
-            Common = 1,
-            Rare = 2,
-            Legendary = 3,
-            Mythic = 4
+            Rare = 1,
+            Epic = 2,
+            Unique = 3,
+            Legend = 4
         }
 
         private const string Prefix = "PeanutWarrior.SwordProgression.";
@@ -31,7 +32,7 @@ namespace PeanutWarrior.Prototype
 
         private CombatPrototypeArena arena;
         private FieldInfo goldField;
-        private string lastMessage = "검 보관함 준비";
+        private string lastMessage = "장비 보관함 준비";
 
         public string LastMessage => lastMessage;
 
@@ -158,9 +159,9 @@ namespace PeanutWarrior.Prototype
             }
         }
 
-        private bool Fail(string message)
+        private bool Fail(string value)
         {
-            lastMessage = message;
+            lastMessage = value;
             return false;
         }
 
@@ -188,6 +189,8 @@ namespace PeanutWarrior.Prototype
 
         private void Load()
         {
+            // Enum values are intentionally kept at 1..4, so old prototype saves
+            // migrate without data loss; only their display names change.
             for (int element = 0; element < ElementCount; element++)
             {
                 swordLevels[element] = Mathf.Max(1, PlayerPrefs.GetInt(Prefix + "Level" + element, 1));
@@ -203,7 +206,10 @@ namespace PeanutWarrior.Prototype
             if (paused) Save();
         }
 
-        private void OnApplicationQuit() => Save();
+        private void OnApplicationQuit()
+        {
+            Save();
+        }
 
         private static bool IsValidElement(int elementIndex)
         {
@@ -226,10 +232,10 @@ namespace PeanutWarrior.Prototype
         {
             return rarity switch
             {
-                SwordRarity.Mythic => "신화",
-                SwordRarity.Legendary => "전설",
-                SwordRarity.Rare => "희귀",
-                SwordRarity.Common => "일반",
+                SwordRarity.Legend => "레전드",
+                SwordRarity.Unique => "유니크",
+                SwordRarity.Epic => "에픽",
+                SwordRarity.Rare => "레어",
                 _ => "미보유"
             };
         }

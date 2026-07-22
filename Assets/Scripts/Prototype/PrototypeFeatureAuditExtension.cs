@@ -37,6 +37,7 @@ namespace PeanutWarrior.Prototype
             Require<WorldThemePrototype>(failures);
             Require<BossPatternWorldViewPrototype>(failures);
             Require<CombatEffectWorldViewPrototype>(failures);
+            Require<MiniPeanutWorldViewPrototype>(failures);
             Require<PeanutMobileCanvasPrototype>(failures);
             Require<PeanutCanvasLayoutGuard>(failures);
             Require<FirstClearRewardPrototype>(failures);
@@ -74,7 +75,7 @@ namespace PeanutWarrior.Prototype
             report.AppendLine("[PeanutWarrior Feature Audit]");
             if (failures.Count == 0)
             {
-                report.AppendLine("PASS · simplified Canvas, stage map, first-clear rewards, save integrity, pooled effects and core progression are active.");
+                report.AppendLine("PASS · simplified Canvas, stage map, visible minis, first-clear rewards, save integrity, pooled effects and core progression are active.");
                 Debug.Log(report.ToString());
                 return;
             }

@@ -31,7 +31,6 @@ namespace PeanutWarrior.Prototype
         private static void RunAudit()
         {
             var failures = new List<string>();
-            Require<MetaProgressionPrototype>(failures);
             Require<SwordProgressionPrototype>(failures);
             Require<LoadoutBonusCombatPrototype>(failures);
             Require<WorldBalanceRuntimePrototype>(failures);
@@ -49,6 +48,8 @@ namespace PeanutWarrior.Prototype
             Canvas canvas = ui != null ? ui.GetComponentInChildren<Canvas>(true) : null;
             if (canvas == null || !canvas.gameObject.activeInHierarchy)
                 failures.Add("The responsive mobile Canvas is missing or inactive.");
+            if (ui != null && (!ui.UsesSimplifiedGrowthMenu || ui.BottomMenuCount != 7))
+                failures.Add("The simplified Peanut Warrior menu contract is not active.");
 
             RuntimeWorldViewPrototype world = FindFirstObjectByType<RuntimeWorldViewPrototype>();
             GameObject worldRoot = world == null
@@ -61,7 +62,7 @@ namespace PeanutWarrior.Prototype
             report.AppendLine("[PeanutWarrior Feature Audit]");
             if (failures.Count == 0)
             {
-                report.AppendLine("PASS · Canvas, world theme, boss warnings, effects, sword progression and balance layers are active.");
+                report.AppendLine("PASS · simplified Canvas, world theme, boss warnings, effects, sword progression and balance layers are active.");
                 Debug.Log(report.ToString());
                 return;
             }

@@ -79,6 +79,21 @@ namespace PeanutWarrior.Core
             NotifyChanged();
         }
 
+        /// <summary>
+        /// UI-facing safe boss challenge entry point.
+        /// Returns true only when a boss battle was actually started.
+        /// </summary>
+        public bool TryStartBossBattle()
+        {
+            if (!CanChallengeBoss)
+            {
+                return false;
+            }
+
+            StartBossBattle();
+            return true;
+        }
+
         public void StartBossBattle()
         {
             if (!CanChallengeBoss)

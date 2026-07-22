@@ -6,9 +6,8 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Owns the final Peanut Warrior growth stats that are not stored directly in
-    /// CombatPrototypeArena. It also provides the lightweight player EXP loop and
-    /// equipment-enhancement material income used by the idle prototype.
+    /// Owns the final ten-stat growth values that are not stored directly in the combat
+    /// arena. It also manages player EXP, HP regeneration and equipment material income.
     /// </summary>
     public sealed class GrowthExpansionPrototype : MonoBehaviour
     {
@@ -37,8 +36,6 @@ namespace PeanutWarrior.Prototype
         private int observedKills;
         private string message = "성장 시스템 준비";
 
-        // Keep these private property names because the existing critical-hit bridge
-        // resolves them through reflection.
         private float CritChance => Mathf.Min(1f, 0.05f + (critChanceLevel - 1) * 0.02f);
         private float CritDamage => 1.5f + (critDamageLevel - 1) * 0.12f;
         private float GoldGainMultiplier => 1f + (goldGainLevel - 1) * 0.08f;
@@ -106,7 +103,6 @@ namespace PeanutWarrior.Prototype
 
             int kills = LifetimeKills;
             if (kills <= observedKills) return;
-
             int gainedKills = kills - observedKills;
             observedKills = kills;
             GrantKillProgress(gainedKills);
@@ -137,6 +133,17 @@ namespace PeanutWarrior.Prototype
             equipmentMaterialProgress += (1f + stageFlow.World * 0.25f) * EquipmentMaterialMultiplier;
             ConvertMaterialProgress();
             message = $"보스 보상 · EXP +{bossExperience:N0} · 장비 강화 재료 {equipmentEnhancementMaterials:N0}";
+            Save();
+        }
+
+        public void GrantOfflineProgress(long experience, int materials, int offlineMinutes)
+        {
+            experience = Math.Max(0L, experience);
+            materials = Mathf.Max(0, materials);
+            if (experience <= 0L && materials <= 0) return;
+            AddExperience(experience);
+            equipmentEnhancementMaterials += materials;
+            message = $"방치 {Mathf.Max(0, offlineMinutes)}분 · EXP +{experience:N0}, 장비 강화 재료 +{materials:N0}";
             Save();
         }
 
@@ -220,9 +227,7 @@ namespace PeanutWarrior.Prototype
             Save();
         }
 
-        private int GlobalStage =>
-            (stageFlow.World - 1) * StageFlowController.StagesPerWorld + stageFlow.Stage;
-
+        private int GlobalStage => PeanutGameRules.ToGlobalStage(stageFlow.World, stageFlow.Stage);
         private long Gold => goldField == null ? 0L : Convert.ToInt64(goldField.GetValue(arena));
         private int LifetimeKills => lifetimeKillsField == null ? 0 : Convert.ToInt32(lifetimeKillsField.GetValue(arena));
 

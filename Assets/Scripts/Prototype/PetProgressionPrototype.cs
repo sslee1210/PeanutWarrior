@@ -109,6 +109,26 @@ namespace PeanutWarrior.Prototype
             return lifetimeHatches[(int)element];
         }
 
+        public int[] GetLevelsCopy()
+        {
+            return (int[])levels.Clone();
+        }
+
+        public int[] GetStarsCopy()
+        {
+            return (int[])stars.Clone();
+        }
+
+        public int[] GetDuplicateShardsCopy()
+        {
+            return (int[])duplicateShards.Clone();
+        }
+
+        public int[] GetLifetimeHatchesCopy()
+        {
+            return (int[])lifetimeHatches.Clone();
+        }
+
         public string GetDisplayName(PetElement element)
         {
             switch (element)
@@ -157,6 +177,21 @@ namespace PeanutWarrior.Prototype
         {
             int index = (int)element;
             return 100L * Math.Max(1, levels[index]) * Math.Max(1, stars[index]);
+        }
+
+        public void RestoreState(int[] restoredLevels, int[] restoredStars, int[] restoredShards, int[] restoredHatches)
+        {
+            for (int i = 0; i < PetCount; i++)
+            {
+                levels[i] = ReadArrayValue(restoredLevels, i, 1, 1, int.MaxValue);
+                stars[i] = ReadArrayValue(restoredStars, i, 1, 1, MaxStars);
+                duplicateShards[i] = ReadArrayValue(restoredShards, i, 0, 0, int.MaxValue);
+                lifetimeHatches[i] = ReadArrayValue(restoredHatches, i, 0, 0, int.MaxValue);
+            }
+            observedHatches = Mathf.Max(ReadLegacyHatches(), TotalHatches);
+            SyncLegacyCombatLevels();
+            Save();
+            lastMessage = "펫 데이터 복구 완료";
         }
 
         public void SaveNow()
@@ -237,6 +272,12 @@ namespace PeanutWarrior.Prototype
                 lifetimeHatches[i] = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "Hatches." + i, 0));
             }
             observedHatches = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "ObservedHatches", TotalHatches));
+        }
+
+        private static int ReadArrayValue(int[] values, int index, int fallback, int min, int max)
+        {
+            if (values == null || index < 0 || index >= values.Length) return fallback;
+            return Mathf.Clamp(values[index], min, max);
         }
 
         private void OnApplicationPause(bool paused)

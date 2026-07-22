@@ -24,18 +24,21 @@ namespace PeanutWarrior.Prototype
         private const float MapTop = 105f;
         private const float MapBottom = ArenaHeight - 45f;
 
-        private const float PlayerMaxHp = 100f;
-        private const float PlayerAttackDamage = 18f;
-        private const float PlayerAttackInterval = 0.42f;
         private const float PlayerMoveSpeed = 92f;
-        private const float PlayerAttackRange = 92f;
-        private const float PlayerSearchRange = 250f;
+        private const float PlayerSearchRange = 245f;
+        private const float PlayerAttackRange = 72f;
+        private const float PlayerStopDistance = 58f;
+        private const float PlayerAttackInterval = 0.45f;
 
-        private const float NormalEnemyHp = 34f;
-        private const float NormalEnemyMoveSpeed = 48f;
-        private const float NormalEnemyAggroRange = 170f;
-        private const float BossHp = 650f;
+        private const float EnemyAggroRange = 150f;
+        private const float EnemyAttackRange = 50f;
+        private const float EnemyMoveSpeed = 48f;
+        private const float BossAggroRange = 320f;
+        private const float BossAttackRange = 82f;
         private const float BossMoveSpeed = 42f;
+
+        private const float NormalEnemyBaseHp = 34f;
+        private const float BossBaseHp = 650f;
 
         private readonly List<EnemyUnit> enemies = new List<EnemyUnit>();
 
@@ -43,10 +46,19 @@ namespace PeanutWarrior.Prototype
         private Vector2 playerPosition;
         private Vector2 playerWanderTarget;
         private float playerWanderTimer;
-        private float playerHp = PlayerMaxHp;
+        private float playerHp;
         private float playerAttackCooldown;
         private float spawnCooldown;
         private string combatMessage = "전투 준비";
+
+        private long gold;
+        private int attackLevel = 1;
+        private int hpLevel = 1;
+
+        private float PlayerMaxHp => 100f + (hpLevel - 1) * 25f;
+        private float PlayerAttackDamage => 18f + (attackLevel - 1) * 6f;
+        private long AttackUpgradeCost => 20L * attackLevel;
+        private long HpUpgradeCost => 25L * hpLevel;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateArena()
@@ -95,13 +107,19 @@ namespace PeanutWarrior.Prototype
             if (stageFlow.Phase == StageFlowPhase.BossReady)
             {
                 enemies.Clear();
-                UpdatePlayerFreeRoam(null);
+                UpdatePlayerMovement(null);
                 combatMessage = "100마리 처치 완료 · 보스 도전 대기";
                 return;
             }
 
-            if (stageFlow.Phase == StageFlowPhase.Hunting) UpdateHunting();
-            else if (stageFlow.Phase == StageFlowPhase.BossBattle) UpdateBossBattle();
+            if (stageFlow.Phase == StageFlowPhase.Hunting)
+            {
+                UpdateHunting();
+            }
+            else if (stageFlow.Phase == StageFlowPhase.BossBattle)
+            {
+                UpdateBossBattle();
+            }
         }
 
         private void UpdateHunting()
@@ -114,7 +132,7 @@ namespace PeanutWarrior.Prototype
             }
 
             EnemyUnit nearest = FindClosestEnemy();
-            UpdatePlayerFreeRoam(nearest);
+            UpdatePlayerMovement(nearest);
             UpdateEnemies();
             UpdateAutomaticAttack(nearest);
         }
@@ -124,41 +142,43 @@ namespace PeanutWarrior.Prototype
             if (enemies.Count == 0) SpawnBoss();
 
             EnemyUnit boss = enemies[0];
-            UpdatePlayerFreeRoam(boss);
+            UpdatePlayerMovement(boss);
             UpdateEnemies();
             UpdateAutomaticAttack(boss);
         }
 
-        private void UpdatePlayerFreeRoam(EnemyUnit nearest)
+        private void UpdatePlayerMovement(EnemyUnit nearest)
         {
-            Vector2 destination;
-            bool hasNearbyEnemy = nearest != null &&
-                Vector2.Distance(playerPosition, nearest.Position) <= PlayerSearchRange;
+            if (nearest != null)
+            {
+                float distance = Vector2.Distance(playerPosition, nearest.Position);
 
-            if (hasNearbyEnemy)
-            {
-                destination = nearest.Position;
-            }
-            else
-            {
-                playerWanderTimer -= Time.deltaTime;
-                if (playerWanderTimer <= 0f || Vector2.Distance(playerPosition, playerWanderTarget) < 10f)
+                if (distance <= PlayerSearchRange && distance > PlayerStopDistance)
                 {
-                    ChoosePlayerWanderTarget();
+                    playerPosition = Vector2.MoveTowards(
+                        playerPosition,
+                        nearest.Position,
+                        PlayerMoveSpeed * Time.deltaTime);
+                    playerPosition = ClampToMap(playerPosition);
+                    return;
                 }
 
-                destination = playerWanderTarget;
+                if (distance <= PlayerStopDistance)
+                {
+                    return;
+                }
             }
 
-            if (nearest != null && Vector2.Distance(playerPosition, nearest.Position) <= PlayerAttackRange * 0.82f)
+            playerWanderTimer -= Time.deltaTime;
+            if (playerWanderTimer <= 0f || Vector2.Distance(playerPosition, playerWanderTarget) < 10f)
             {
-                return;
+                ChoosePlayerWanderTarget();
             }
 
             playerPosition = Vector2.MoveTowards(
                 playerPosition,
-                destination,
-                PlayerMoveSpeed * Time.deltaTime);
+                playerWanderTarget,
+                PlayerMoveSpeed * 0.75f * Time.deltaTime);
             playerPosition = ClampToMap(playerPosition);
         }
 
@@ -167,71 +187,76 @@ namespace PeanutWarrior.Prototype
             for (int i = 0; i < enemies.Count; i++)
             {
                 EnemyUnit enemy = enemies[i];
-                float distanceToPlayer = Vector2.Distance(enemy.Position, playerPosition);
-                float aggroRange = enemy.IsBoss ? 9999f : NormalEnemyAggroRange;
-                float moveSpeed = enemy.IsBoss ? BossMoveSpeed : NormalEnemyMoveSpeed;
+                float distance = Vector2.Distance(enemy.Position, playerPosition);
+                float aggroRange = enemy.IsBoss ? BossAggroRange : EnemyAggroRange;
+                float attackRange = enemy.IsBoss ? BossAttackRange : EnemyAttackRange;
+                float moveSpeed = enemy.IsBoss ? BossMoveSpeed : EnemyMoveSpeed;
 
-                Vector2 destination;
-                if (distanceToPlayer <= aggroRange)
+                if (distance <= aggroRange)
                 {
-                    destination = playerPosition;
-                }
-                else
-                {
-                    enemy.WanderTimer -= Time.deltaTime;
-                    if (enemy.WanderTimer <= 0f || Vector2.Distance(enemy.Position, enemy.WanderTarget) < 8f)
+                    if (distance > attackRange)
                     {
-                        ChooseEnemyWanderTarget(enemy);
+                        enemy.Position = Vector2.MoveTowards(
+                            enemy.Position,
+                            playerPosition,
+                            moveSpeed * Time.deltaTime);
+                        enemy.Position = ClampToMap(enemy.Position);
                     }
-                    destination = enemy.WanderTarget;
+                    else
+                    {
+                        DamagePlayerFrom(
+                            enemy,
+                            enemy.IsBoss ? 11f : 4.5f,
+                            enemy.IsBoss ? 0.9f : 1.1f);
+                    }
+
+                    continue;
                 }
 
-                float stopDistance = enemy.IsBoss ? 82f : 46f;
-                if (distanceToPlayer > stopDistance)
+                enemy.WanderTimer -= Time.deltaTime;
+                if (enemy.WanderTimer <= 0f || Vector2.Distance(enemy.Position, enemy.WanderTarget) < 8f)
                 {
-                    enemy.Position = Vector2.MoveTowards(
-                        enemy.Position,
-                        destination,
-                        moveSpeed * Time.deltaTime);
-                    enemy.Position = ClampToMap(enemy.Position);
+                    ChooseEnemyWanderTarget(enemy);
                 }
 
-                if (distanceToPlayer <= stopDistance + 12f)
-                {
-                    DamagePlayerFrom(
-                        enemy,
-                        enemy.IsBoss ? 11f : 4.5f,
-                        enemy.IsBoss ? 0.9f : 1.1f);
-                }
+                enemy.Position = Vector2.MoveTowards(
+                    enemy.Position,
+                    enemy.WanderTarget,
+                    moveSpeed * 0.65f * Time.deltaTime);
+                enemy.Position = ClampToMap(enemy.Position);
             }
         }
 
-        private void UpdateAutomaticAttack(EnemyUnit preferredTarget)
+        private void UpdateAutomaticAttack(EnemyUnit target)
         {
-            if (preferredTarget == null) return;
-            if (Vector2.Distance(playerPosition, preferredTarget.Position) > PlayerAttackRange) return;
+            if (target == null) return;
+            if (Vector2.Distance(playerPosition, target.Position) > PlayerAttackRange) return;
 
             playerAttackCooldown -= Time.deltaTime;
             if (playerAttackCooldown > 0f) return;
 
             playerAttackCooldown = PlayerAttackInterval;
-            preferredTarget.Hp -= PlayerAttackDamage;
-            combatMessage = preferredTarget.IsBoss ? "보스에게 연속 참격!" : "가까운 몬스터 공격!";
+            target.Hp -= PlayerAttackDamage;
+            combatMessage = target.IsBoss ? "보스에게 연속 참격!" : "몬스터에게 접근해 기본 공격!";
 
-            if (preferredTarget.Hp > 0f) return;
+            if (target.Hp > 0f) return;
 
-            bool wasBoss = preferredTarget.IsBoss;
-            enemies.Remove(preferredTarget);
+            bool wasBoss = target.IsBoss;
+            enemies.Remove(target);
 
             if (wasBoss)
             {
-                combatMessage = "보스 처치! 다음 스테이지로 이동";
+                long reward = 40L + stageFlow.Stage * 10L;
+                gold += reward;
+                combatMessage = $"보스 처치! +{reward} 골드 · 다음 스테이지 이동";
                 stageFlow.HandleBossDefeated();
             }
             else
             {
+                long reward = 2L + stageFlow.Stage;
+                gold += reward;
                 stageFlow.RegisterMonsterKill();
-                combatMessage = $"몬스터 처치 · {stageFlow.MonsterKills}/{StageFlowController.RequiredKills}";
+                combatMessage = $"몬스터 처치 +{reward} 골드 · {stageFlow.MonsterKills}/{StageFlowController.RequiredKills}";
             }
         }
 
@@ -242,6 +267,8 @@ namespace PeanutWarrior.Prototype
 
             enemy.AttackCooldown = interval;
             playerHp = Mathf.Max(0f, playerHp - damage);
+            combatMessage = enemy.IsBoss ? "보스에게 피격!" : "몬스터에게 피격!";
+
             if (playerHp > 0f) return;
 
             combatMessage = enemy.IsBoss
@@ -258,10 +285,10 @@ namespace PeanutWarrior.Prototype
         private void SpawnNormalEnemy()
         {
             float stageScale = 1f + ((stageFlow.World - 1) * 30 + stageFlow.Stage - 1) * 0.025f;
-            float hp = NormalEnemyHp * stageScale;
+            float hp = NormalEnemyBaseHp * stageScale;
             Vector2 spawn = RandomMapPoint();
 
-            if (Vector2.Distance(spawn, playerPosition) < 180f)
+            if (Vector2.Distance(spawn, playerPosition) < 160f)
             {
                 spawn = new Vector2(MapRight - 20f, Random.Range(MapTop, MapBottom));
             }
@@ -281,7 +308,7 @@ namespace PeanutWarrior.Prototype
         private void SpawnBoss()
         {
             float stageScale = 1f + ((stageFlow.World - 1) * 30 + stageFlow.Stage - 1) * 0.05f;
-            float hp = BossHp * stageScale;
+            float hp = BossBaseHp * stageScale;
 
             EnemyUnit boss = new EnemyUnit
             {
@@ -318,7 +345,7 @@ namespace PeanutWarrior.Prototype
         private void ChoosePlayerWanderTarget()
         {
             playerWanderTarget = RandomMapPoint();
-            playerWanderTimer = Random.Range(1.4f, 3.8f);
+            playerWanderTimer = Random.Range(1.2f, 3.2f);
         }
 
         private void ChooseEnemyWanderTarget(EnemyUnit enemy)
@@ -370,6 +397,23 @@ namespace PeanutWarrior.Prototype
             }
         }
 
+        private void UpgradeAttack()
+        {
+            if (gold < AttackUpgradeCost) return;
+            gold -= AttackUpgradeCost;
+            attackLevel++;
+            combatMessage = $"공격력 강화 완료 · Lv.{attackLevel}";
+        }
+
+        private void UpgradeHp()
+        {
+            if (gold < HpUpgradeCost) return;
+            gold -= HpUpgradeCost;
+            hpLevel++;
+            playerHp = PlayerMaxHp;
+            combatMessage = $"체력 강화 완료 · Lv.{hpLevel}";
+        }
+
         private void OnGUI()
         {
             if (stageFlow == null) return;
@@ -383,7 +427,21 @@ namespace PeanutWarrior.Prototype
                 $"{stageFlow.GetWorldDisplayName()}  {stageFlow.World}-{stageFlow.Stage}   " +
                 $"처치 {stageFlow.MonsterKills}/{StageFlowController.RequiredKills}");
             GUI.Label(new Rect(left + 16f, top + 38f, 600f, 24f), combatMessage);
+            GUI.Label(new Rect(left + 540f, top + 12f, 190f, 24f), $"골드 {gold}");
+
             DrawHealthBar(new Rect(left + 18f, top + 70f, 220f, 20f), playerHp, PlayerMaxHp, "땅콩전사 HP");
+
+            if (GUI.Button(new Rect(left + 500f, top + 50f, 110f, 34f),
+                    $"공격 Lv.{attackLevel}\n{AttackUpgradeCost}G"))
+            {
+                UpgradeAttack();
+            }
+
+            if (GUI.Button(new Rect(left + 620f, top + 50f, 110f, 34f),
+                    $"체력 Lv.{hpLevel}\n{HpUpgradeCost}G"))
+            {
+                UpgradeHp();
+            }
 
             Rect playerRect = new Rect(
                 left + playerPosition.x - 28f,

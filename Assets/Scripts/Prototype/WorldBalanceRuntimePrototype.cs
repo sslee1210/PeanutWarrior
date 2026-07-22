@@ -96,7 +96,7 @@ namespace PeanutWarrior.Prototype
             AddGold(extraGold);
             AddFragments(extraFragments);
             if (extraGold > 0 || extraFragments > 0)
-                lastMessage = $"균왕 월드 보정 · +{extraGold:N0}G, 조각 +{extraFragments:N0}";
+                lastMessage = $"보스 월드 보정 · +{extraGold:N0}G, 조각 +{extraFragments:N0}";
         }
 
         private void ApplyWorldDamageScaling()

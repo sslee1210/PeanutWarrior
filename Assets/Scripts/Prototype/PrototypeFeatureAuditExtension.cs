@@ -38,6 +38,10 @@ namespace PeanutWarrior.Prototype
             Require<BossPatternWorldViewPrototype>(failures);
             Require<CombatEffectWorldViewPrototype>(failures);
             Require<PeanutMobileCanvasPrototype>(failures);
+            Require<PeanutCanvasLayoutGuard>(failures);
+            Require<FirstClearRewardPrototype>(failures);
+            Require<ProgressNotificationBridge>(failures);
+            Require<PrototypeSaveIntegrityGuard>(failures);
 
             PrototypeShopAndDaily shop = FindFirstObjectByType<PrototypeShopAndDaily>();
             FieldInfo swordField = typeof(PrototypeShopAndDaily).GetField("swordProgression", PrivateInstance);
@@ -58,11 +62,19 @@ namespace PeanutWarrior.Prototype
             if (worldRoot == null || !worldRoot.activeInHierarchy)
                 failures.Add("The runtime 2D battlefield is missing or inactive.");
 
+            CombatEffectWorldViewPrototype effects = FindFirstObjectByType<CombatEffectWorldViewPrototype>();
+            if (effects != null && effects.AvailableRingCount + effects.AvailableSlashCount <= 0)
+                failures.Add("The procedural combat-effect pools were not prewarmed.");
+
+            PrototypeSaveIntegrityGuard integrity = FindFirstObjectByType<PrototypeSaveIntegrityGuard>();
+            if (integrity != null && integrity.SchemaVersion <= 0)
+                failures.Add("The save schema version is invalid.");
+
             var report = new StringBuilder();
             report.AppendLine("[PeanutWarrior Feature Audit]");
             if (failures.Count == 0)
             {
-                report.AppendLine("PASS · simplified Canvas, world theme, boss warnings, effects, sword progression and balance layers are active.");
+                report.AppendLine("PASS · simplified Canvas, stage map, first-clear rewards, save integrity, pooled effects and core progression are active.");
                 Debug.Log(report.ToString());
                 return;
             }

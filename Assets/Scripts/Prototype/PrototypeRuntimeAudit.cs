@@ -44,12 +44,17 @@ namespace PeanutWarrior.Prototype
             RequireSingle<BossPatternPrototype>(errors);
             RequireSingle<RuntimeWorldViewPrototype>(errors);
             RequireSingle<PeanutMobileCanvasPrototype>(errors);
+            RequireSingle<PeanutCanvasLayoutGuard>(errors);
             RequireSingle<PrototypeSaveBridge>(errors);
+            RequireSingle<PrototypeSaveIntegrityGuard>(errors);
             RequireSingle<IdleSystemsPrototype>(errors);
             RequireSingle<PrototypeShopAndDaily>(errors);
             RequireSingle<SkillManagementPrototype>(errors);
             RequireSingle<GrowthExpansionPrototype>(errors);
             RequireSingle<SwordProgressionPrototype>(errors);
+            RequireSingle<FirstClearRewardPrototype>(errors);
+            RequireSingle<ProgressNotificationBridge>(errors);
+            RequireSingle<CombatEffectWorldViewPrototype>(errors);
             RequireSingle<LegacyGuiSuppressor>(errors);
 
             AuditArena(errors, warnings);
@@ -61,11 +66,14 @@ namespace PeanutWarrior.Prototype
             AuditShop(errors);
             AuditWorld(errors, warnings);
             AuditCanvas(errors, warnings);
+            AuditSaveIntegrity(errors);
+            AuditFirstClear(errors);
+            AuditEffectPool(errors, warnings);
 
             var report = new StringBuilder();
             report.AppendLine("[PeanutWarrior Runtime Audit]");
             if (errors.Count == 0)
-                report.AppendLine("PASS · core combat, progression, simplified Canvas UI and reflection bindings are valid.");
+                report.AppendLine("PASS · core combat, simplified progression, Canvas UI, save integrity and reflection bindings are valid.");
             else
             {
                 report.AppendLine($"FAIL · {errors.Count} blocking issue(s)");
@@ -131,7 +139,7 @@ namespace PeanutWarrior.Prototype
             if (flow == null) return;
             if (flow.World < 1) errors.Add("StageFlowController.World is below 1.");
             if (flow.Stage < 1 || flow.Stage > StageFlowController.StagesPerWorld) errors.Add($"Invalid stage: {flow.Stage}");
-            if (flow.MonsterKills < 0 || flow.MonsterKills > 100) errors.Add($"Invalid kill counter: {flow.MonsterKills}");
+            if (flow.MonsterKills < 0 || flow.MonsterKills > StageFlowController.RequiredKills) errors.Add($"Invalid kill counter: {flow.MonsterKills}");
         }
 
         private static void AuditGrowth(List<string> errors)
@@ -200,6 +208,31 @@ namespace PeanutWarrior.Prototype
             else if (!runtimeCanvas.gameObject.activeInHierarchy) errors.Add("Mobile Canvas is inactive.");
             if (FindFirstObjectByType<EventSystem>() == null) errors.Add("No EventSystem exists for Canvas buttons.");
             if (Screen.width < Screen.height) warnings.Add("Current display is portrait; the game is designed for landscape.");
+        }
+
+        private static void AuditSaveIntegrity(List<string> errors)
+        {
+            PrototypeSaveIntegrityGuard guard = FindFirstObjectByType<PrototypeSaveIntegrityGuard>();
+            if (guard == null) return;
+            if (guard.SchemaVersion <= 0) errors.Add("Save schema version must be positive.");
+            RequireMethods(typeof(PrototypeSaveIntegrityGuard), new[] { "TryRestoreBackup" }, PublicInstance, errors);
+        }
+
+        private static void AuditFirstClear(List<string> errors)
+        {
+            FirstClearRewardPrototype rewards = FindFirstObjectByType<FirstClearRewardPrototype>();
+            if (rewards == null) return;
+            if (rewards.BossKills < 0 || rewards.UniqueClears < 0) errors.Add("First-clear counters cannot be negative.");
+        }
+
+        private static void AuditEffectPool(List<string> errors, List<string> warnings)
+        {
+            CombatEffectWorldViewPrototype effects = FindFirstObjectByType<CombatEffectWorldViewPrototype>();
+            if (effects == null) return;
+            if (effects.AvailableRingCount + effects.AvailableSlashCount <= 0 && effects.ActiveEffectCount <= 0)
+                errors.Add("Combat effect pool was not initialized.");
+            if (effects.ActiveEffectCount > 40)
+                warnings.Add($"High active combat-effect count: {effects.ActiveEffectCount}");
         }
 
         private static float ReadPropertyFloat(Type type, object target, string name)

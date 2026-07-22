@@ -126,12 +126,7 @@ namespace PeanutWarrior.Core
             }
 
             BossDefeated?.Invoke();
-
-            if (autoChallenge)
-            {
-                MoveToNextStage();
-            }
-
+            MoveToNextStage();
             monsterKills = 0;
             phase = StageFlowPhase.Hunting;
             NotifyChanged();

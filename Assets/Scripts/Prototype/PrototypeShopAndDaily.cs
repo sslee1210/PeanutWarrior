@@ -4,10 +4,6 @@ using UnityEngine;
 
 namespace PeanutWarrior.Prototype
 {
-    /// <summary>
-    /// Prototype daily reward and summon shop. Swords and eggs remain separate
-    /// acquisition routes and are never added to normal-monster drops.
-    /// </summary>
     public sealed class PrototypeShopAndDaily : MonoBehaviour
     {
         private const string Prefix = "PeanutWarrior.Shop.";
@@ -28,6 +24,7 @@ namespace PeanutWarrior.Prototype
         private int totalSwordSummons;
         private string lastClaimDate = string.Empty;
         private string shopMessage = "일일 보상·소환 준비";
+        private bool panelOpen;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateShop()
@@ -55,10 +52,7 @@ namespace PeanutWarrior.Prototype
             huntingElementField = arenaType.GetField("huntingElement", PrivateInstance);
             bossElementField = arenaType.GetField("bossElement", PrivateInstance);
             basicAttackLevelField = arenaType.GetField("basicAttackLevel", PrivateInstance);
-
-            if (idleSystems != null)
-                eggsField = typeof(IdleSystemsPrototype).GetField("eggs", PrivateInstance);
-
+            if (idleSystems != null) eggsField = typeof(IdleSystemsPrototype).GetField("eggs", PrivateInstance);
             Load();
         }
 
@@ -66,20 +60,9 @@ namespace PeanutWarrior.Prototype
         private long Fragments => fragmentsField == null ? 0L : (long)fragmentsField.GetValue(arena);
         private int Diamonds => diamondsField == null ? 0 : (int)diamondsField.GetValue(arena);
 
-        private void AddGold(long amount)
-        {
-            if (goldField != null) goldField.SetValue(arena, Gold + amount);
-        }
-
-        private void AddFragments(long amount)
-        {
-            if (fragmentsField != null) fragmentsField.SetValue(arena, Fragments + amount);
-        }
-
-        private void AddDiamonds(int amount)
-        {
-            if (diamondsField != null) diamondsField.SetValue(arena, Diamonds + amount);
-        }
+        private void AddGold(long amount) { if (goldField != null) goldField.SetValue(arena, Gold + amount); }
+        private void AddFragments(long amount) { if (fragmentsField != null) fragmentsField.SetValue(arena, Fragments + amount); }
+        private void AddDiamonds(int amount) { if (diamondsField != null) diamondsField.SetValue(arena, Diamonds + amount); }
 
         private bool SpendDiamonds(int amount)
         {
@@ -129,14 +112,13 @@ namespace PeanutWarrior.Prototype
             totalSwordSummons++;
 
             FieldInfo targetField = equipForBoss ? bossElementField : huntingElementField;
-            if (targetField != null)
-                targetField.SetValue(arena, Enum.ToObject(targetField.FieldType, elementIndex));
+            if (targetField != null) targetField.SetValue(arena, Enum.ToObject(targetField.FieldType, elementIndex));
 
             if (totalSwordSummons % 5 == 0 && basicAttackLevelField != null)
             {
                 int level = (int)basicAttackLevelField.GetValue(arena);
                 basicAttackLevelField.SetValue(arena, level + 1);
-                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 도감 보너스로 기본 공격 강화";
+                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 기본 공격 강화";
             }
             else
             {
@@ -157,10 +139,9 @@ namespace PeanutWarrior.Prototype
                 shopMessage = "알 구매에 다이아 3개 필요";
                 return;
             }
-
             int eggs = (int)eggsField.GetValue(idleSystems);
             eggsField.SetValue(idleSystems, eggs + 1);
-            shopMessage = "미니 알 구매 완료 · 부화 패널에서 시작";
+            shopMessage = "미니 알 구매 완료 · 미니 패널에서 부화";
             Save();
         }
 
@@ -169,8 +150,7 @@ namespace PeanutWarrior.Prototype
             PlayerPrefs.SetInt(Prefix + "Streak", dailyStreak);
             PlayerPrefs.SetInt(Prefix + "SwordSummons", totalSwordSummons);
             PlayerPrefs.SetString(Prefix + "LastClaim", lastClaimDate);
-            for (int i = 0; i < swordCopies.Length; i++)
-                PlayerPrefs.SetInt(Prefix + "SwordCopies" + i, swordCopies[i]);
+            for (int i = 0; i < swordCopies.Length; i++) PlayerPrefs.SetInt(Prefix + "SwordCopies" + i, swordCopies[i]);
             PlayerPrefs.Save();
         }
 
@@ -179,55 +159,44 @@ namespace PeanutWarrior.Prototype
             dailyStreak = PlayerPrefs.GetInt(Prefix + "Streak", 0);
             totalSwordSummons = PlayerPrefs.GetInt(Prefix + "SwordSummons", 0);
             lastClaimDate = PlayerPrefs.GetString(Prefix + "LastClaim", string.Empty);
-            for (int i = 0; i < swordCopies.Length; i++)
-                swordCopies[i] = PlayerPrefs.GetInt(Prefix + "SwordCopies" + i, 0);
+            for (int i = 0; i < swordCopies.Length; i++) swordCopies[i] = PlayerPrefs.GetInt(Prefix + "SwordCopies" + i, 0);
         }
 
-        private void OnApplicationPause(bool paused)
-        {
-            if (paused) Save();
-        }
-
+        private void OnApplicationPause(bool paused) { if (paused) Save(); }
         private void OnApplicationQuit() => Save();
 
         private void OnGUI()
         {
-            Rect panel = new Rect(Screen.width - 250f, 15f, 235f, 238f);
+            float buttonWidth = 118f;
+            Rect toggle = new Rect(Screen.width - buttonWidth - 15f, 15f, buttonWidth, 36f);
+            if (GUI.Button(toggle, panelOpen ? "상점 닫기" : "상점·보상")) panelOpen = !panelOpen;
+            if (!panelOpen) return;
+
+            float width = Mathf.Min(300f, Screen.width - 30f);
+            float x = Mathf.Clamp(Screen.width - width - 15f, 15f, Screen.width - width - 15f);
+            Rect panel = new Rect(x, 58f, width, 242f);
             GUI.Box(panel, "접속 보상·소환 상점");
-            GUI.Label(new Rect(panel.x + 10f, panel.y + 28f, 215f, 42f), shopMessage);
-            GUI.Label(new Rect(panel.x + 10f, panel.y + 70f, 215f, 22f),
-                $"연속 접속 {dailyStreak}일 · 검 소환 {totalSwordSummons}회");
+            GUI.Label(new Rect(panel.x + 12f, panel.y + 28f, panel.width - 24f, 42f), shopMessage);
+            GUI.Label(new Rect(panel.x + 12f, panel.y + 70f, panel.width - 24f, 22f),
+                $"연속 접속 {dailyStreak}일 · 검 소환 {totalSwordSummons}회 · 다이아 {Diamonds}");
 
-            if (GUI.Button(new Rect(panel.x + 10f, panel.y + 96f, 215f, 34f), "오늘의 접속 보상 받기")) ClaimDailyReward();
-            if (GUI.Button(new Rect(panel.x + 10f, panel.y + 136f, 102f, 38f), "사냥 검 소환\n5◆")) SummonSword(false);
-            if (GUI.Button(new Rect(panel.x + 123f, panel.y + 136f, 102f, 38f), "보스 검 소환\n5◆")) SummonSword(true);
-            if (GUI.Button(new Rect(panel.x + 10f, panel.y + 180f, 215f, 34f), "미니 알 구매 · 3◆")) BuyEgg();
-
-            GUI.Label(new Rect(panel.x + 10f, panel.y + 216f, 215f, 18f),
+            if (GUI.Button(new Rect(panel.x + 12f, panel.y + 96f, panel.width - 24f, 34f), "오늘의 접속 보상 받기")) ClaimDailyReward();
+            float half = (panel.width - 30f) * 0.5f;
+            if (GUI.Button(new Rect(panel.x + 12f, panel.y + 136f, half, 38f), "사냥 검 소환\n5◆")) SummonSword(false);
+            if (GUI.Button(new Rect(panel.x + 18f + half, panel.y + 136f, half, 38f), "보스 검 소환\n5◆")) SummonSword(true);
+            if (GUI.Button(new Rect(panel.x + 12f, panel.y + 180f, panel.width - 24f, 34f), "미니 알 구매 · 3◆")) BuyEgg();
+            GUI.Label(new Rect(panel.x + 12f, panel.y + 218f, panel.width - 24f, 18f),
                 $"검 도감: 무{swordCopies[0]} 화{swordCopies[1]} 빙{swordCopies[2]} 뇌{swordCopies[3]}");
         }
 
         private static string ElementName(int index)
         {
-            return index switch
-            {
-                0 => "무속성",
-                1 => "화염",
-                2 => "냉기",
-                3 => "번개",
-                _ => "검"
-            };
+            return index switch { 0 => "무속성", 1 => "화염", 2 => "냉기", 3 => "번개", _ => "검" };
         }
 
         private static string RarityName(int rarity)
         {
-            return rarity switch
-            {
-                4 => "신화",
-                3 => "전설",
-                2 => "희귀",
-                _ => "일반"
-            };
+            return rarity switch { 4 => "신화", 3 => "전설", 2 => "희귀", _ => "일반" };
         }
     }
 }

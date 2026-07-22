@@ -69,7 +69,7 @@ namespace PeanutWarrior.Prototype
             legacyCritDamageField = type.GetField("miniCritDamageLevel", PrivateInstance);
             legacyMessageField = type.GetField("systemMessage", PrivateInstance);
             Load();
-            observedHatches = Mathf.Max(TotalHatches, ReadLegacyHatches());
+            MigrateLegacyHatches();
             SyncLegacyCombatLevels();
         }
 
@@ -83,51 +83,20 @@ namespace PeanutWarrior.Prototype
             Save();
         }
 
-        public int GetLevel(PetElement element)
-        {
-            return levels[(int)element];
-        }
-
-        public int GetStars(PetElement element)
-        {
-            return stars[(int)element];
-        }
-
-        public int GetDuplicateShards(PetElement element)
-        {
-            return duplicateShards[(int)element];
-        }
-
+        public int GetLevel(PetElement element) => levels[(int)element];
+        public int GetStars(PetElement element) => stars[(int)element];
+        public int GetDuplicateShards(PetElement element) => duplicateShards[(int)element];
+        public int GetLifetimeHatches(PetElement element) => lifetimeHatches[(int)element];
         public int GetRequiredShards(PetElement element)
         {
             int star = GetStars(element);
             return star >= MaxStars ? 0 : star * 3;
         }
 
-        public int GetLifetimeHatches(PetElement element)
-        {
-            return lifetimeHatches[(int)element];
-        }
-
-        public int[] GetLevelsCopy()
-        {
-            return (int[])levels.Clone();
-        }
-
-        public int[] GetStarsCopy()
-        {
-            return (int[])stars.Clone();
-        }
-
-        public int[] GetDuplicateShardsCopy()
-        {
-            return (int[])duplicateShards.Clone();
-        }
-
-        public int[] GetLifetimeHatchesCopy()
-        {
-            return (int[])lifetimeHatches.Clone();
-        }
+        public int[] GetLevelsCopy() => (int[])levels.Clone();
+        public int[] GetStarsCopy() => (int[])stars.Clone();
+        public int[] GetDuplicateShardsCopy() => (int[])duplicateShards.Clone();
+        public int[] GetLifetimeHatchesCopy() => (int[])lifetimeHatches.Clone();
 
         public string GetDisplayName(PetElement element)
         {
@@ -146,14 +115,10 @@ namespace PeanutWarrior.Prototype
             int star = GetStars(element);
             switch (element)
             {
-                case PetElement.Fire:
-                    return $"공격 보조 · Lv.{level} · {star}성";
-                case PetElement.Ice:
-                    return $"치명타 보조 · Lv.{level} · {star}성";
-                case PetElement.Lightning:
-                    return $"치명타 피해 보조 · Lv.{level} · {star}성";
-                default:
-                    return string.Empty;
+                case PetElement.Fire: return $"공격 보조 · Lv.{level} · {star}성";
+                case PetElement.Ice: return $"치명타 보조 · Lv.{level} · {star}성";
+                case PetElement.Lightning: return $"치명타 피해 보조 · Lv.{level} · {star}성";
+                default: return string.Empty;
             }
         }
 
@@ -194,14 +159,30 @@ namespace PeanutWarrior.Prototype
             lastMessage = "펫 데이터 복구 완료";
         }
 
-        public void SaveNow()
+        public void SaveNow() => Save();
+
+        private void MigrateLegacyHatches()
         {
+            int legacyCount = ReadLegacyHatches();
+            int missing = Mathf.Max(0, legacyCount - TotalHatches);
+            if (missing > 0)
+            {
+                for (int i = 0; i < missing; i++) RegisterHatch(i % PetCount);
+                lastMessage = $"기존 부화 기록 {missing}회 펫 도감으로 변환";
+                if (legacyMessageField != null) legacyMessageField.SetValue(legacyPets, lastMessage);
+            }
+            observedHatches = Mathf.Max(legacyCount, TotalHatches);
             Save();
         }
 
         private void RegisterHatch()
         {
-            int index = UnityEngine.Random.Range(0, PetCount);
+            RegisterHatch(UnityEngine.Random.Range(0, PetCount));
+        }
+
+        private void RegisterHatch(int index)
+        {
+            index = Mathf.Clamp(index, 0, PetCount - 1);
             lifetimeHatches[index]++;
             duplicateShards[index]++;
 
@@ -285,9 +266,6 @@ namespace PeanutWarrior.Prototype
             if (paused) Save();
         }
 
-        private void OnApplicationQuit()
-        {
-            Save();
-        }
+        private void OnApplicationQuit() => Save();
     }
 }

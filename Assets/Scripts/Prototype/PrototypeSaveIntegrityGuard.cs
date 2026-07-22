@@ -6,9 +6,9 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Adds a lightweight schema version and backup snapshot around the existing
-    /// PlayerPrefs prototype save. Invalid values are clamped before they can spread
-    /// into combat or UI state on the next session.
+    /// Compatibility integrity guard around the legacy PlayerPrefs save. The primary
+    /// save is now PeanutSaveGameService, but this guard keeps old keys valid during
+    /// migration and never truncates the completed advancement progression.
     /// </summary>
     [DefaultExecutionOrder(23000)]
     public sealed class PrototypeSaveIntegrityGuard : MonoBehaviour
@@ -27,13 +27,14 @@ namespace PeanutWarrior.Prototype
             public long utcTicks;
         }
 
-        private const int CurrentSchemaVersion = 2;
+        private const int CurrentSchemaVersion = 3;
         private const string VersionKey = "PeanutWarrior.Save.SchemaVersion";
         private const string BackupKey = "PeanutWarrior.Save.BackupJson";
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
 
         private CombatPrototypeArena arena;
         private StageFlowController stageFlow;
+        private AdvancementProgressionPrototype advancement;
         private FieldInfo goldField;
         private FieldInfo fragmentsField;
         private FieldInfo diamondsField;
@@ -60,6 +61,7 @@ namespace PeanutWarrior.Prototype
         {
             arena = FindFirstObjectByType<CombatPrototypeArena>();
             stageFlow = FindFirstObjectByType<StageFlowController>();
+            advancement = FindFirstObjectByType<AdvancementProgressionPrototype>();
             if (arena == null || stageFlow == null)
             {
                 enabled = false;
@@ -84,7 +86,7 @@ namespace PeanutWarrior.Prototype
         private void Update()
         {
             backupTimer += Time.unscaledDeltaTime;
-            if (backupTimer < 30f) return;
+            if (backupTimer < PeanutGameRules.BackupSaveIntervalSeconds) return;
             backupTimer = 0f;
             ValidateAndRepair();
             SaveBackup();
@@ -112,7 +114,8 @@ namespace PeanutWarrior.Prototype
             long gold = ReadLong(goldField, arena, 0L);
             long fragments = ReadLong(fragmentsField, arena, 0L);
             int diamonds = ReadInt(diamondsField, arena, 0);
-            int advancement = ReadInt(advancementTierField, arena, 0);
+            int tier = ReadInt(advancementTierField, arena, 0);
+            int validTier = Mathf.Clamp(tier, 0, PeanutGameRules.AdvancementCount - 1);
 
             repaired |= SetIfDifferent(worldField, stageFlow, Mathf.Max(1, world));
             repaired |= SetIfDifferent(stageField, stageFlow, Mathf.Clamp(stage, 1, StageFlowController.StagesPerWorld));
@@ -120,7 +123,12 @@ namespace PeanutWarrior.Prototype
             repaired |= SetIfDifferent(goldField, arena, Math.Max(0L, gold));
             repaired |= SetIfDifferent(fragmentsField, arena, Math.Max(0L, fragments));
             repaired |= SetIfDifferent(diamondsField, arena, Mathf.Max(0, diamonds));
-            repaired |= SetIfDifferent(advancementTierField, arena, Mathf.Clamp(advancement, 0, 2));
+            repaired |= SetIfDifferent(advancementTierField, arena, validTier);
+            if (advancement != null && advancement.Tier != validTier)
+            {
+                advancement.RestoreTier(validTier, false);
+                repaired = true;
+            }
 
             int oldVersion = PlayerPrefs.GetInt(VersionKey, 0);
             if (oldVersion != CurrentSchemaVersion)
@@ -153,7 +161,10 @@ namespace PeanutWarrior.Prototype
                 gold = Math.Max(0L, ReadLong(goldField, arena, 0L)),
                 fragments = Math.Max(0L, ReadLong(fragmentsField, arena, 0L)),
                 diamonds = Mathf.Max(0, ReadInt(diamondsField, arena, 0)),
-                advancementTier = Mathf.Clamp(ReadInt(advancementTierField, arena, 0), 0, 2),
+                advancementTier = Mathf.Clamp(
+                    advancement == null ? ReadInt(advancementTierField, arena, 0) : advancement.Tier,
+                    0,
+                    PeanutGameRules.AdvancementCount - 1),
                 utcTicks = DateTime.UtcNow.Ticks
             };
             PlayerPrefs.SetString(BackupKey, JsonUtility.ToJson(snapshot));
@@ -187,14 +198,16 @@ namespace PeanutWarrior.Prototype
                 return false;
             }
 
+            int restoredTier = Mathf.Clamp(snapshot.advancementTier, 0, PeanutGameRules.AdvancementCount - 1);
             worldField?.SetValue(stageFlow, Mathf.Max(1, snapshot.world));
             stageField?.SetValue(stageFlow, Mathf.Clamp(snapshot.stage, 1, StageFlowController.StagesPerWorld));
             killsField?.SetValue(stageFlow, Mathf.Clamp(snapshot.kills, 0, StageFlowController.RequiredKills));
             goldField?.SetValue(arena, Math.Max(0L, snapshot.gold));
             fragmentsField?.SetValue(arena, Math.Max(0L, snapshot.fragments));
             diamondsField?.SetValue(arena, Mathf.Max(0, snapshot.diamonds));
-            advancementTierField?.SetValue(arena, Mathf.Clamp(snapshot.advancementTier, 0, 2));
-            lastReport = "최근 백업 복원 완료";
+            advancementTierField?.SetValue(arena, restoredTier);
+            advancement?.RestoreTier(restoredTier);
+            lastReport = "최근 호환 백업 복원 완료";
             PlayerPrefs.SetInt(VersionKey, CurrentSchemaVersion);
             PlayerPrefs.Save();
             return true;

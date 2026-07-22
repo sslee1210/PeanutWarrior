@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace PeanutWarrior.Core
 {
-    public enum BattlePhase
+    public enum StageFlowPhase
     {
         Hunting,
         BossReady,
@@ -24,14 +24,14 @@ namespace PeanutWarrior.Core
         [SerializeField, Range(1, StagesPerWorld)] private int stage = 1;
         [SerializeField, Range(0, RequiredKills)] private int monsterKills;
         [SerializeField] private bool autoChallenge;
-        [SerializeField] private BattlePhase phase = BattlePhase.Hunting;
+        [SerializeField] private StageFlowPhase phase = StageFlowPhase.Hunting;
 
         public int World => world;
         public int Stage => stage;
         public int MonsterKills => monsterKills;
         public bool AutoChallenge => autoChallenge;
-        public BattlePhase Phase => phase;
-        public bool CanChallengeBoss => phase == BattlePhase.BossReady;
+        public StageFlowPhase Phase => phase;
+        public bool CanChallengeBoss => phase == StageFlowPhase.BossReady;
 
         public event Action StateChanged;
         public event Action BossBattleStarted;
@@ -44,7 +44,7 @@ namespace PeanutWarrior.Core
             autoChallenge = enabled;
             NotifyChanged();
 
-            if (enabled && phase == BattlePhase.BossReady)
+            if (enabled && phase == StageFlowPhase.BossReady)
             {
                 StartBossBattle();
             }
@@ -52,7 +52,7 @@ namespace PeanutWarrior.Core
 
         public void RegisterMonsterKill(int count = 1)
         {
-            if (phase != BattlePhase.Hunting || count <= 0)
+            if (phase != StageFlowPhase.Hunting || count <= 0)
             {
                 return;
             }
@@ -61,7 +61,7 @@ namespace PeanutWarrior.Core
 
             if (monsterKills >= RequiredKills)
             {
-                phase = BattlePhase.BossReady;
+                phase = StageFlowPhase.BossReady;
                 NotifyChanged();
 
                 if (autoChallenge)
@@ -75,49 +75,36 @@ namespace PeanutWarrior.Core
             NotifyChanged();
         }
 
-        /// <summary>
-        /// Called by either the boss challenge button or auto challenge.
-        /// The player/battle system should fully restore HP and MP when
-        /// BossBattleStarted is raised.
-        /// </summary>
         public void StartBossBattle()
         {
-            if (phase != BattlePhase.BossReady)
+            if (phase != StageFlowPhase.BossReady)
             {
                 return;
             }
 
-            phase = BattlePhase.BossBattle;
+            phase = StageFlowPhase.BossBattle;
             BossBattleStarted?.Invoke();
             NotifyChanged();
         }
 
-        /// <summary>
-        /// Boss death rule: remain on the current stage, disable auto challenge,
-        /// reset progress to 0/100, and return to hunting.
-        /// </summary>
         public void HandleBossBattleDeath()
         {
-            if (phase != BattlePhase.BossBattle)
+            if (phase != StageFlowPhase.BossBattle)
             {
                 return;
             }
 
             autoChallenge = false;
             monsterKills = 0;
-            phase = BattlePhase.Hunting;
+            phase = StageFlowPhase.Hunting;
 
             BossBattleFailed?.Invoke();
             NotifyChanged();
         }
 
-        /// <summary>
-        /// Hunting death rule: disable auto challenge and move to the immediately
-        /// previous stage. Stage 1-1 remains at 1-1.
-        /// </summary>
         public void HandleHuntingDeath()
         {
-            if (phase == BattlePhase.BossBattle)
+            if (phase == StageFlowPhase.BossBattle)
             {
                 return;
             }
@@ -125,7 +112,7 @@ namespace PeanutWarrior.Core
             autoChallenge = false;
             MoveToPreviousStage();
             monsterKills = 0;
-            phase = BattlePhase.Hunting;
+            phase = StageFlowPhase.Hunting;
 
             HuntingDeath?.Invoke();
             NotifyChanged();
@@ -133,7 +120,7 @@ namespace PeanutWarrior.Core
 
         public void HandleBossDefeated()
         {
-            if (phase != BattlePhase.BossBattle)
+            if (phase != StageFlowPhase.BossBattle)
             {
                 return;
             }
@@ -146,7 +133,7 @@ namespace PeanutWarrior.Core
             }
 
             monsterKills = 0;
-            phase = BattlePhase.Hunting;
+            phase = StageFlowPhase.Hunting;
             NotifyChanged();
         }
 
@@ -161,7 +148,7 @@ namespace PeanutWarrior.Core
             world = targetWorld;
             stage = targetStage;
             monsterKills = 0;
-            phase = BattlePhase.Hunting;
+            phase = StageFlowPhase.Hunting;
             NotifyChanged();
         }
 

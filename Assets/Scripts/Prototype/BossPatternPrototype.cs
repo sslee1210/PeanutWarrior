@@ -5,13 +5,11 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Keeps only the automatic boss time limit. Manual dodge zones and pattern
-    /// damage were removed because Peanut Warrior is designed to run unattended.
-    /// Boss difficulty now comes from the boss's normal damage, HP and the timer.
+    /// Automatic boss timer only. No manual dodge zones or pattern input are used.
     /// </summary>
     public sealed class BossPatternPrototype : MonoBehaviour
     {
-        private const float BossTimeLimit = 45f;
+        private const float BossTimeLimit = PeanutGameRules.BossTimeLimitSeconds;
 
         private StageFlowController stageFlow;
         private MethodInfo bossDeathMethod;
@@ -63,7 +61,7 @@ namespace PeanutWarrior.Prototype
             remainingTime = BossTimeLimit;
             encounterActive = true;
             enraged = false;
-            patternName = "AUTO · 보스와 전투 중";
+            patternName = "AUTO · " + stageFlow.GetBossDisplayName();
         }
 
         private void EndEncounter()

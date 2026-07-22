@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Reflection;
 using UnityEngine;
 
@@ -11,6 +12,7 @@ namespace PeanutWarrior.Prototype
 
         private CombatPrototypeArena arena;
         private IdleSystemsPrototype idleSystems;
+        private SwordProgressionPrototype swordProgression;
         private FieldInfo goldField;
         private FieldInfo fragmentsField;
         private FieldInfo diamondsField;
@@ -26,6 +28,10 @@ namespace PeanutWarrior.Prototype
         private string shopMessage = "일일 보상·소환 준비";
         private bool panelOpen;
 
+        public string ShopMessage => shopMessage;
+        public int DailyStreak => dailyStreak;
+        public int TotalSwordSummons => totalSwordSummons;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateShop()
         {
@@ -39,6 +45,7 @@ namespace PeanutWarrior.Prototype
         {
             arena = FindFirstObjectByType<CombatPrototypeArena>();
             idleSystems = FindFirstObjectByType<IdleSystemsPrototype>();
+            swordProgression = FindFirstObjectByType<SwordProgressionPrototype>();
             if (arena == null)
             {
                 enabled = false;
@@ -56,9 +63,9 @@ namespace PeanutWarrior.Prototype
             Load();
         }
 
-        private long Gold => goldField == null ? 0L : (long)goldField.GetValue(arena);
-        private long Fragments => fragmentsField == null ? 0L : (long)fragmentsField.GetValue(arena);
-        private int Diamonds => diamondsField == null ? 0 : (int)diamondsField.GetValue(arena);
+        private long Gold => goldField == null ? 0L : Convert.ToInt64(goldField.GetValue(arena));
+        private long Fragments => fragmentsField == null ? 0L : Convert.ToInt64(fragmentsField.GetValue(arena));
+        private int Diamonds => diamondsField == null ? 0 : Convert.ToInt32(diamondsField.GetValue(arena));
 
         private void AddGold(long amount) { if (goldField != null) goldField.SetValue(arena, Gold + amount); }
         private void AddFragments(long amount) { if (fragmentsField != null) fragmentsField.SetValue(arena, Fragments + amount); }
@@ -66,25 +73,30 @@ namespace PeanutWarrior.Prototype
 
         private bool SpendDiamonds(int amount)
         {
-            if (Diamonds < amount) return false;
+            if (diamondsField == null || Diamonds < amount) return false;
             diamondsField.SetValue(arena, Diamonds - amount);
             return true;
         }
 
         private void ClaimDailyReward()
         {
-            string today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+            string today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             if (lastClaimDate == today)
             {
                 shopMessage = "오늘의 접속 보상은 이미 수령함";
                 return;
             }
 
-            DateTime previous;
-            bool consecutive = DateTime.TryParse(lastClaimDate, out previous) &&
-                               (DateTime.UtcNow.Date - previous.Date).TotalDays <= 1.1d;
+            bool consecutive = DateTime.TryParseExact(
+                    lastClaimDate,
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal,
+                    out DateTime previous) &&
+                (DateTime.UtcNow.Date - previous.Date).TotalDays <= 1.1d;
+
             dailyStreak = consecutive ? dailyStreak + 1 : 1;
-            dailyStreak = Mathf.Clamp(dailyStreak, 1, 7);
+            if (dailyStreak > 7) dailyStreak = 1;
             lastClaimDate = today;
 
             long goldReward = 100L * dailyStreak;
@@ -93,7 +105,7 @@ namespace PeanutWarrior.Prototype
             AddGold(goldReward);
             AddDiamonds(diamondReward);
             AddFragments(fragmentReward);
-            shopMessage = $"접속 {dailyStreak}일차 · {goldReward}G, 다이아 {diamondReward}, 조각 {fragmentReward}";
+            shopMessage = $"접속 {dailyStreak}일차 · {goldReward:N0}G, 다이아 {diamondReward}, 조각 {fragmentReward}";
             Save();
         }
 
@@ -110,19 +122,21 @@ namespace PeanutWarrior.Prototype
             int rarity = rarityRoll < 20 ? 4 : rarityRoll < 120 ? 3 : rarityRoll < 420 ? 2 : 1;
             swordCopies[elementIndex]++;
             totalSwordSummons++;
+            swordProgression?.RegisterSummon(elementIndex, rarity);
 
             FieldInfo targetField = equipForBoss ? bossElementField : huntingElementField;
-            if (targetField != null) targetField.SetValue(arena, Enum.ToObject(targetField.FieldType, elementIndex));
+            if (targetField != null)
+                targetField.SetValue(arena, Enum.ToObject(targetField.FieldType, elementIndex));
 
             if (totalSwordSummons % 5 == 0 && basicAttackLevelField != null)
             {
-                int level = (int)basicAttackLevelField.GetValue(arena);
+                int level = Convert.ToInt32(basicAttackLevelField.GetValue(arena));
                 basicAttackLevelField.SetValue(arena, level + 1);
-                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 기본 공격 강화";
+                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 검 도감으로 기본 공격 강화";
             }
             else
             {
-                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · {(equipForBoss ? "보스" : "사냥")} 장착";
+                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · {(equipForBoss ? "균왕" : "사냥")} 장착";
             }
             Save();
         }
@@ -139,7 +153,7 @@ namespace PeanutWarrior.Prototype
                 shopMessage = "알 구매에 다이아 3개 필요";
                 return;
             }
-            int eggs = (int)eggsField.GetValue(idleSystems);
+            int eggs = Convert.ToInt32(eggsField.GetValue(idleSystems));
             eggsField.SetValue(idleSystems, eggs + 1);
             shopMessage = "미니 알 구매 완료 · 미니 패널에서 부화";
             Save();
@@ -150,16 +164,18 @@ namespace PeanutWarrior.Prototype
             PlayerPrefs.SetInt(Prefix + "Streak", dailyStreak);
             PlayerPrefs.SetInt(Prefix + "SwordSummons", totalSwordSummons);
             PlayerPrefs.SetString(Prefix + "LastClaim", lastClaimDate);
-            for (int i = 0; i < swordCopies.Length; i++) PlayerPrefs.SetInt(Prefix + "SwordCopies" + i, swordCopies[i]);
+            for (int i = 0; i < swordCopies.Length; i++)
+                PlayerPrefs.SetInt(Prefix + "SwordCopies" + i, swordCopies[i]);
             PlayerPrefs.Save();
         }
 
         private void Load()
         {
-            dailyStreak = PlayerPrefs.GetInt(Prefix + "Streak", 0);
-            totalSwordSummons = PlayerPrefs.GetInt(Prefix + "SwordSummons", 0);
+            dailyStreak = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "Streak", 0));
+            totalSwordSummons = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "SwordSummons", 0));
             lastClaimDate = PlayerPrefs.GetString(Prefix + "LastClaim", string.Empty);
-            for (int i = 0; i < swordCopies.Length; i++) swordCopies[i] = PlayerPrefs.GetInt(Prefix + "SwordCopies" + i, 0);
+            for (int i = 0; i < swordCopies.Length; i++)
+                swordCopies[i] = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "SwordCopies" + i, 0));
         }
 
         private void OnApplicationPause(bool paused) { if (paused) Save(); }
@@ -183,7 +199,7 @@ namespace PeanutWarrior.Prototype
             if (GUI.Button(new Rect(panel.x + 12f, panel.y + 96f, panel.width - 24f, 34f), "오늘의 접속 보상 받기")) ClaimDailyReward();
             float half = (panel.width - 30f) * 0.5f;
             if (GUI.Button(new Rect(panel.x + 12f, panel.y + 136f, half, 38f), "사냥 검 소환\n5◆")) SummonSword(false);
-            if (GUI.Button(new Rect(panel.x + 18f + half, panel.y + 136f, half, 38f), "보스 검 소환\n5◆")) SummonSword(true);
+            if (GUI.Button(new Rect(panel.x + 18f + half, panel.y + 136f, half, 38f), "균왕 검 소환\n5◆")) SummonSword(true);
             if (GUI.Button(new Rect(panel.x + 12f, panel.y + 180f, panel.width - 24f, 34f), "미니 알 구매 · 3◆")) BuyEgg();
             GUI.Label(new Rect(panel.x + 12f, panel.y + 218f, panel.width - 24f, 18f),
                 $"검 도감: 무{swordCopies[0]} 화{swordCopies[1]} 빙{swordCopies[2]} 뇌{swordCopies[3]}");

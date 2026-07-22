@@ -340,7 +340,8 @@ namespace PeanutWarrior.Prototype
             float width = Mathf.Max(12f, Mathf.Abs(delta.x) + 10f);
             float height = Mathf.Max(10f, Mathf.Abs(delta.y) + 8f);
             Rect rect = new Rect(midpoint.x - width * 0.5f, midpoint.y - height * 0.5f, width, height);
-            GUI.Box(rect, index == 1 ? "돌진" : GUIContent.none);
+            GUIContent content = index == 1 ? new GUIContent("돌진") : GUIContent.none;
+            GUI.Box(rect, content);
         }
 
         private int CurrentEnemyCount()

@@ -58,7 +58,7 @@ namespace PeanutWarrior.Prototype
             root.SetActive(pattern.EncounterActive);
             if (!pattern.EncounterActive) return;
 
-            timerLabel.text = $"균왕 AUTO · {Mathf.CeilToInt(pattern.RemainingTime)}초\n{pattern.PatternName}";
+            timerLabel.text = $"보스 AUTO · {Mathf.CeilToInt(pattern.RemainingTime)}초\n{pattern.PatternName}";
             timerLabel.color = pattern.IsEnraged
                 ? new Color(1f, 0.42f, 0.22f)
                 : new Color(1f, 0.93f, 0.52f);

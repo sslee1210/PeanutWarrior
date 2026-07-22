@@ -49,7 +49,7 @@ namespace PeanutWarrior.Tests
         [Test]
         public void Growth_ContainsOnlyTheFinalSupportingFields()
         {
-            TypeAssert.IsSubclassOf(typeof(MonoBehaviour), typeof(GrowthExpansionPrototype));
+            Assert.IsTrue(typeof(GrowthExpansionPrototype).IsSubclassOf(typeof(MonoBehaviour)));
             string[] requiredFields =
             {
                 "critChanceLevel", "critDamageLevel", "goldGainLevel", "hpRegenLevel",

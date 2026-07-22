@@ -20,6 +20,7 @@ namespace PeanutWarrior.Tests
             Assert.NotNull(typeof(StageFlowController).GetMethod("TryStartBossBattle", PublicInstance));
             Assert.NotNull(typeof(StageFlowController).GetMethod("HandleBossBattleDeath", PublicInstance));
             Assert.NotNull(typeof(StageFlowController).GetMethod("HandleHuntingDeath", PublicInstance));
+            Assert.NotNull(typeof(StageFlowController).GetMethod("SelectStage", PublicInstance));
         }
 
         [Test]
@@ -46,20 +47,20 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
-        public void NewProgressionSystems_ExposeStablePublicContracts()
+        public void SwordProgression_ExposesStablePublicContracts()
         {
-            Assert.NotNull(typeof(MetaProgressionPrototype).GetMethod("UpgradeShellVitality", PublicInstance));
-            Assert.NotNull(typeof(MetaProgressionPrototype).GetMethod("UpgradeElementResearch", PublicInstance));
-            Assert.NotNull(typeof(MetaProgressionPrototype).GetMethod("UpgradeIdleHours", PublicInstance));
             Assert.NotNull(typeof(SwordProgressionPrototype).GetMethod("RegisterSummon", PublicInstance));
             Assert.NotNull(typeof(SwordProgressionPrototype).GetMethod("ManualSynthesize", PublicInstance));
+            Assert.NotNull(typeof(SwordProgressionPrototype).GetMethod("UpgradeSword", PublicInstance));
             Assert.NotNull(typeof(SwordProgressionPrototype).GetMethod("GetDamageMultiplier", PublicInstance));
         }
 
         [Test]
-        public void CanvasAndWorldViews_ArePresent()
+        public void Canvas_UsesSimplifiedDevelopmentMenuContract()
         {
             Assert.IsTrue(typeof(PeanutMobileCanvasPrototype).IsSubclassOf(typeof(MonoBehaviour)));
+            Assert.NotNull(typeof(PeanutMobileCanvasPrototype).GetProperty("BottomMenuCount", PublicInstance));
+            Assert.NotNull(typeof(PeanutMobileCanvasPrototype).GetProperty("UsesSimplifiedGrowthMenu", PublicInstance));
             Assert.IsTrue(typeof(RuntimeWorldViewPrototype).IsSubclassOf(typeof(MonoBehaviour)));
             Assert.IsTrue(typeof(BossPatternWorldViewPrototype).IsSubclassOf(typeof(MonoBehaviour)));
             Assert.IsTrue(typeof(WorldThemePrototype).IsSubclassOf(typeof(MonoBehaviour)));

@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using PeanutWarrior.Core;
 using UnityEngine;
@@ -8,11 +9,18 @@ namespace PeanutWarrior.Prototype
 {
     /// <summary>
     /// Procedural placeholder effects for basic attacks and the eight skills.
-    /// These effects can later be replaced by authored sprites and particles.
+    /// Effect GameObjects are pooled instead of repeatedly created and destroyed.
     /// </summary>
     [DefaultExecutionOrder(17500)]
     public sealed class CombatEffectWorldViewPrototype : MonoBehaviour
     {
+        private sealed class EffectView
+        {
+            public GameObject Root;
+            public SpriteRenderer Renderer;
+            public bool IsRing;
+        }
+
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
         private const float SourceLeft = 55f;
         private const float SourceRight = 705f;
@@ -20,6 +28,8 @@ namespace PeanutWarrior.Prototype
         private const float SourceBottom = 425f;
         private const float WorldHalfWidth = 8.2f;
         private const float WorldHalfHeight = 4.2f;
+        private const int RingPrewarmCount = 8;
+        private const int SlashPrewarmCount = 18;
 
         private CombatPrototypeArena arena;
         private StageFlowController stageFlow;
@@ -35,6 +45,13 @@ namespace PeanutWarrior.Prototype
         private Sprite circleSprite;
         private Sprite slashSprite;
         private Transform effectRoot;
+        private readonly Queue<EffectView> ringPool = new Queue<EffectView>();
+        private readonly Queue<EffectView> slashPool = new Queue<EffectView>();
+        private int activeEffectCount;
+
+        public int ActiveEffectCount => activeEffectCount;
+        public int AvailableRingCount => ringPool.Count;
+        public int AvailableSlashCount => slashPool.Count;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -70,6 +87,8 @@ namespace PeanutWarrior.Prototype
             GameObject rootObject = new GameObject("Combat Effects");
             rootObject.transform.SetParent(worldRoot != null ? worldRoot.transform : transform, false);
             effectRoot = rootObject.transform;
+            PrewarmPools();
+
             previousAttackCooldown = ReadAttackCooldown();
             float[] cooldowns = ReadCooldowns();
             if (cooldowns != null)
@@ -115,6 +134,47 @@ namespace PeanutWarrior.Prototype
             }
             texture.Apply();
             return Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), size);
+        }
+
+        private void PrewarmPools()
+        {
+            for (int i = 0; i < RingPrewarmCount; i++)
+                ringPool.Enqueue(CreateEffectView(true));
+            for (int i = 0; i < SlashPrewarmCount; i++)
+                slashPool.Enqueue(CreateEffectView(false));
+        }
+
+        private EffectView CreateEffectView(bool ring)
+        {
+            GameObject go = new GameObject(ring ? "Pooled Skill Ring" : "Pooled Skill Slash");
+            go.transform.SetParent(effectRoot, false);
+            SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+            renderer.sprite = ring ? circleSprite : slashSprite;
+            renderer.sortingOrder = ring ? 16 : 17;
+            go.SetActive(false);
+            return new EffectView { Root = go, Renderer = renderer, IsRing = ring };
+        }
+
+        private EffectView Acquire(bool ring)
+        {
+            Queue<EffectView> pool = ring ? ringPool : slashPool;
+            EffectView view = pool.Count > 0 ? pool.Dequeue() : CreateEffectView(ring);
+            view.Root.SetActive(true);
+            activeEffectCount++;
+            return view;
+        }
+
+        private void Release(EffectView view)
+        {
+            if (view == null || view.Root == null) return;
+            view.Root.SetActive(false);
+            view.Root.transform.SetParent(effectRoot, false);
+            view.Root.transform.localPosition = Vector3.zero;
+            view.Root.transform.localRotation = Quaternion.identity;
+            view.Root.transform.localScale = Vector3.one;
+            activeEffectCount = Mathf.Max(0, activeEffectCount - 1);
+            if (view.IsRing) ringPool.Enqueue(view);
+            else slashPool.Enqueue(view);
         }
 
         private void Update()
@@ -172,45 +232,38 @@ namespace PeanutWarrior.Prototype
 
         private void SpawnRing(Vector3 position, Color color, float startScale, float endScale, float duration)
         {
-            GameObject go = new GameObject("Skill Ring");
-            go.transform.SetParent(effectRoot, false);
-            go.transform.position = position;
-            SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-            renderer.sprite = circleSprite;
-            renderer.color = new Color(color.r, color.g, color.b, 0.78f);
-            renderer.sortingOrder = 16;
-            StartCoroutine(AnimateEffect(go, renderer, startScale, endScale, duration, 0f));
+            EffectView view = Acquire(true);
+            view.Root.transform.position = position;
+            view.Root.transform.rotation = Quaternion.identity;
+            view.Renderer.color = new Color(color.r, color.g, color.b, 0.78f);
+            StartCoroutine(AnimateEffect(view, startScale, endScale, duration, 0f));
         }
 
         private void SpawnSlash(Vector3 position, Color color, float scale, float angle)
         {
-            GameObject go = new GameObject("Skill Slash");
-            go.transform.SetParent(effectRoot, false);
-            go.transform.position = position;
-            go.transform.rotation = Quaternion.Euler(0f, 0f, angle);
-            SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-            renderer.sprite = slashSprite;
-            renderer.color = new Color(color.r, color.g, color.b, 0.92f);
-            renderer.sortingOrder = 17;
-            StartCoroutine(AnimateEffect(go, renderer, scale * 0.45f, scale * 1.45f, 0.26f, 18f));
+            EffectView view = Acquire(false);
+            view.Root.transform.position = position;
+            view.Root.transform.rotation = Quaternion.Euler(0f, 0f, angle);
+            view.Renderer.color = new Color(color.r, color.g, color.b, 0.92f);
+            StartCoroutine(AnimateEffect(view, scale * 0.45f, scale * 1.45f, 0.26f, 18f));
         }
 
-        private IEnumerator AnimateEffect(GameObject target, SpriteRenderer renderer, float from, float to, float duration, float rotationSpeed)
+        private IEnumerator AnimateEffect(EffectView view, float from, float to, float duration, float rotationSpeed)
         {
             float elapsed = 0f;
-            while (elapsed < duration && target != null)
+            while (elapsed < duration && view != null && view.Root != null && view.Root.activeSelf)
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
                 float scale = Mathf.Lerp(from, to, 1f - Mathf.Pow(1f - t, 2f));
-                target.transform.localScale = Vector3.one * scale;
-                target.transform.Rotate(0f, 0f, rotationSpeed * Time.deltaTime);
-                Color current = renderer.color;
+                view.Root.transform.localScale = Vector3.one * scale;
+                view.Root.transform.Rotate(0f, 0f, rotationSpeed * Time.deltaTime);
+                Color current = view.Renderer.color;
                 current.a = 1f - t;
-                renderer.color = current;
+                view.Renderer.color = current;
                 yield return null;
             }
-            if (target != null) Destroy(target);
+            Release(view);
         }
 
         private float ReadAttackCooldown()
@@ -236,7 +289,9 @@ namespace PeanutWarrior.Prototype
         {
             get
             {
-                Vector2 source = playerPositionField == null ? new Vector2(380f, 280f) : (Vector2)playerPositionField.GetValue(arena);
+                Vector2 source = playerPositionField == null
+                    ? new Vector2(380f, 280f)
+                    : (Vector2)playerPositionField.GetValue(arena);
                 float x = Mathf.Lerp(-WorldHalfWidth, WorldHalfWidth, Mathf.InverseLerp(SourceLeft, SourceRight, source.x));
                 float y = Mathf.Lerp(WorldHalfHeight, -WorldHalfHeight, Mathf.InverseLerp(SourceTop, SourceBottom, source.y));
                 return new Vector3(x, y, 0f);

@@ -35,12 +35,14 @@ namespace PeanutWarrior.Prototype
             Require<LoadoutBonusCombatPrototype>(failures);
             Require<WorldBalanceRuntimePrototype>(failures);
             Require<WorldThemePrototype>(failures);
+            Require<BossPatternPrototype>(failures);
             Require<BossPatternWorldViewPrototype>(failures);
             Require<CombatEffectWorldViewPrototype>(failures);
             Require<MiniPeanutWorldViewPrototype>(failures);
             Require<PeanutMobileCanvasPrototype>(failures);
             Require<PeanutCanvasLayoutGuard>(failures);
             Require<StageTransitionCombatResetBridge>(failures);
+            Require<GlobalSkillAutoGatePrototype>(failures);
             Require<FirstClearRewardPrototype>(failures);
             Require<ProgressNotificationBridge>(failures);
             Require<PrototypeSaveIntegrityGuard>(failures);
@@ -55,8 +57,20 @@ namespace PeanutWarrior.Prototype
             Canvas canvas = ui != null ? ui.GetComponentInChildren<Canvas>(true) : null;
             if (canvas == null || !canvas.gameObject.activeInHierarchy)
                 failures.Add("The responsive mobile Canvas is missing or inactive.");
-            if (ui != null && (!ui.UsesSimplifiedGrowthMenu || ui.BottomMenuCount != 7))
-                failures.Add("The simplified Peanut Warrior menu contract is not active.");
+            if (ui != null &&
+                (!ui.UsesSimplifiedGrowthMenu || ui.BottomMenuCount != 6 ||
+                 !ui.UsesGlobalSkillAuto || !ui.HasTopStageSelector))
+                failures.Add("The six-tab idle RPG menu contract is not active.");
+
+            SkillManagementPrototype skillManager = FindFirstObjectByType<SkillManagementPrototype>();
+            if (skillManager == null || typeof(SkillManagementPrototype).GetProperty("GlobalAutoEnabled") == null)
+                failures.Add("The global skill AUTO state is unavailable.");
+
+            GrowthExpansionPrototype growth = FindFirstObjectByType<GrowthExpansionPrototype>();
+            if (growth == null ||
+                typeof(GrowthExpansionPrototype).GetField("expGainLevel", PrivateInstance) == null ||
+                typeof(GrowthExpansionPrototype).GetField("equipmentGainLevel", PrivateInstance) == null)
+                failures.Add("The final ten-stat growth model is incomplete.");
 
             RuntimeWorldViewPrototype world = FindFirstObjectByType<RuntimeWorldViewPrototype>();
             GameObject worldRoot = world == null
@@ -77,7 +91,7 @@ namespace PeanutWarrior.Prototype
             report.AppendLine("[PeanutWarrior Feature Audit]");
             if (failures.Count == 0)
             {
-                report.AppendLine("PASS · simplified Canvas, stage map/reset, visible minis, first-clear rewards, save integrity, offline correction, pooled effects and core progression are active.");
+                report.AppendLine("PASS · six-tab icon UI, top stage selector, global skill AUTO, idle boss timer, final growth stats and core progression are active.");
                 Debug.Log(report.ToString());
                 return;
             }

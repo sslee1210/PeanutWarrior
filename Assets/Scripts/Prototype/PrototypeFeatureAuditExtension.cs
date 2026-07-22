@@ -40,9 +40,11 @@ namespace PeanutWarrior.Prototype
             Require<MiniPeanutWorldViewPrototype>(failures);
             Require<PeanutMobileCanvasPrototype>(failures);
             Require<PeanutCanvasLayoutGuard>(failures);
+            Require<StageTransitionCombatResetBridge>(failures);
             Require<FirstClearRewardPrototype>(failures);
             Require<ProgressNotificationBridge>(failures);
             Require<PrototypeSaveIntegrityGuard>(failures);
+            Require<OfflineCombatRewardCorrectionPrototype>(failures);
 
             PrototypeShopAndDaily shop = FindFirstObjectByType<PrototypeShopAndDaily>();
             FieldInfo swordField = typeof(PrototypeShopAndDaily).GetField("swordProgression", PrivateInstance);
@@ -75,7 +77,7 @@ namespace PeanutWarrior.Prototype
             report.AppendLine("[PeanutWarrior Feature Audit]");
             if (failures.Count == 0)
             {
-                report.AppendLine("PASS · simplified Canvas, stage map, visible minis, first-clear rewards, save integrity, pooled effects and core progression are active.");
+                report.AppendLine("PASS · simplified Canvas, stage map/reset, visible minis, first-clear rewards, save integrity, offline correction, pooled effects and core progression are active.");
                 Debug.Log(report.ToString());
                 return;
             }

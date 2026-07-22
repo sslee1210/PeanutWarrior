@@ -6,13 +6,7 @@ namespace PeanutWarrior.Prototype
 {
     public sealed class CombatPrototypeArena : MonoBehaviour
     {
-        private enum SwordElement
-        {
-            Neutral,
-            Fire,
-            Ice,
-            Lightning
-        }
+        private enum SwordElement { Neutral, Fire, Ice, Lightning }
 
         private sealed class EnemyUnit
         {
@@ -32,12 +26,11 @@ namespace PeanutWarrior.Prototype
         }
 
         private const float ArenaWidth = 760f;
-        private const float ArenaHeight = 420f;
+        private const float ArenaHeight = 470f;
         private const float MapLeft = 55f;
         private const float MapRight = ArenaWidth - 55f;
-        private const float MapTop = 115f;
+        private const float MapTop = 155f;
         private const float MapBottom = ArenaHeight - 45f;
-
         private const float PlayerMoveSpeed = 92f;
         private const float PlayerSearchRange = 245f;
         private const float PlayerAttackRange = 72f;
@@ -68,23 +61,34 @@ namespace PeanutWarrior.Prototype
 
         private long gold;
         private long fragments;
+        private int diamonds;
+        private int lifetimeKills;
+        private int lastDiamondMilestone;
         private int attackLevel = 1;
         private int hpLevel = 1;
         private int maxMpLevel = 1;
         private int mpRegenLevel = 1;
         private int basicAttackLevel = 1;
+        private int advancementTier;
+        private bool miniSlotsUnlocked;
         private SwordElement huntingElement = SwordElement.Neutral;
         private SwordElement bossElement = SwordElement.Fire;
 
-        private float PlayerMaxHp => 100f + (hpLevel - 1) * 25f;
-        private float PlayerMaxMp => 100f + (maxMpLevel - 1) * 20f;
-        private float PlayerMpRegen => 8f + (mpRegenLevel - 1) * 2.5f;
-        private float PlayerAttackDamage => (18f + (attackLevel - 1) * 6f) * (1f + (basicAttackLevel - 1) * 0.12f);
+        private float AdvancementStatMultiplier => 1f + advancementTier * 0.35f;
+        private float PlayerMaxHp => (100f + (hpLevel - 1) * 25f) * AdvancementStatMultiplier;
+        private float PlayerMaxMp => 100f + (maxMpLevel - 1) * 20f + advancementTier * 15f;
+        private float PlayerMpRegen => 8f + (mpRegenLevel - 1) * 2.5f + advancementTier;
+        private float PlayerAttackDamage => (18f + (attackLevel - 1) * 6f) *
+            (1f + (basicAttackLevel - 1) * 0.12f) * AdvancementStatMultiplier;
+        private int BasicAttackHits => 1 + advancementTier;
+        private float SkillAdvancementMultiplier => 1f + advancementTier * 0.25f;
         private long AttackUpgradeCost => 20L * attackLevel;
         private long HpUpgradeCost => 25L * hpLevel;
         private long MaxMpUpgradeCost => 30L * maxMpLevel;
         private long MpRegenUpgradeCost => 35L * mpRegenLevel;
-        private SwordElement ActiveElement => stageFlow != null && stageFlow.Phase == StageFlowPhase.BossBattle ? bossElement : huntingElement;
+        private int GlobalStage => (stageFlow.World - 1) * StageFlowController.StagesPerWorld + stageFlow.Stage;
+        private int CombatPower => Mathf.RoundToInt(PlayerAttackDamage * 8f + PlayerMaxHp * 0.7f + PlayerMaxMp * 0.25f);
+        private SwordElement ActiveElement => stageFlow.Phase == StageFlowPhase.BossBattle ? bossElement : huntingElement;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateArena()
@@ -128,19 +132,10 @@ namespace PeanutWarrior.Prototype
             playerMp = Mathf.Min(PlayerMaxMp, playerMp + PlayerMpRegen * Time.deltaTime);
             playerAttackCooldown -= Time.deltaTime;
             for (int i = 0; i < skillCooldowns.Length; i++) skillCooldowns[i] -= Time.deltaTime;
-
             UpdateStatuses();
 
-            if (stageFlow.Phase == StageFlowPhase.BossReady)
-            {
-                enemies.Clear();
-                UpdatePlayerMovement(null);
-                combatMessage = "100마리 처치 완료 · 보스 도전 대기";
-                return;
-            }
-
-            if (stageFlow.Phase == StageFlowPhase.Hunting) UpdateHunting();
-            else if (stageFlow.Phase == StageFlowPhase.BossBattle) UpdateBossBattle();
+            if (stageFlow.Phase == StageFlowPhase.BossBattle) UpdateBossBattle();
+            else UpdateHunting();
         }
 
         private void UpdateHunting()
@@ -225,7 +220,6 @@ namespace PeanutWarrior.Prototype
                     enemy.WanderTarget = RandomMapPoint();
                     enemy.WanderTimer = Random.Range(1.5f, 4.5f);
                 }
-
                 enemy.Position = Vector2.MoveTowards(enemy.Position, enemy.WanderTarget, speed * 0.65f * Time.deltaTime);
                 enemy.Position = ClampToMap(enemy.Position);
             }
@@ -237,14 +231,18 @@ namespace PeanutWarrior.Prototype
             if (Vector2.Distance(playerPosition, target.Position) > PlayerAttackRange) return;
 
             playerAttackCooldown = PlayerAttackInterval;
-            DealDamage(target, PlayerAttackDamage, true);
+            for (int hit = 0; hit < BasicAttackHits; hit++)
+            {
+                if (!enemies.Contains(target)) break;
+                DealDamage(target, PlayerAttackDamage / BasicAttackHits, true);
+            }
+            combatMessage = $"{AdvancementName()} 기본 공격 · {BasicAttackHits}타";
         }
 
         private void DealDamage(EnemyUnit target, float damage, bool applyElement)
         {
             if (target == null || !enemies.Contains(target)) return;
             target.Hp -= damage;
-
             if (applyElement) ApplyElement(target, damage);
             if (target.Hp <= 0f) KillEnemy(target);
         }
@@ -266,18 +264,15 @@ namespace PeanutWarrior.Prototype
                     target.BurnTimer = 4f;
                     target.BurnTickTimer = 0.5f;
                     target.BurnDamage = Mathf.Max(target.BurnDamage, baseDamage * 0.18f);
-                    combatMessage = "화염 검 · 화상 부여";
                     break;
                 case SwordElement.Ice:
                     target.FrostTimer = 3f;
-                    combatMessage = "냉기 검 · 이동속도 감소";
                     break;
                 case SwordElement.Lightning:
                     if (target.ShockCooldown <= 0f)
                     {
                         target.ShockCooldown = 1.2f;
                         ChainLightning(target, baseDamage * 0.45f);
-                        combatMessage = "번개 검 · 연쇄 감전";
                     }
                     break;
             }
@@ -289,8 +284,7 @@ namespace PeanutWarrior.Prototype
             for (int i = 0; i < enemies.Count && hits < 2; i++)
             {
                 EnemyUnit other = enemies[i];
-                if (other == source) continue;
-                if (Vector2.Distance(source.Position, other.Position) > 150f) continue;
+                if (other == source || Vector2.Distance(source.Position, other.Position) > 150f) continue;
                 other.Hp -= damage;
                 hits++;
             }
@@ -313,7 +307,6 @@ namespace PeanutWarrior.Prototype
                         enemy.Hp -= enemy.BurnDamage;
                     }
                 }
-
                 if (enemy.Hp <= 0f && enemies.Contains(enemy)) KillEnemy(enemy);
             }
         }
@@ -329,11 +322,15 @@ namespace PeanutWarrior.Prototype
 
                 playerMp -= mpCost;
                 skillCooldowns[index] = 5f + offset * 1.5f;
-                float multiplier = (1.4f + offset * 0.35f) * (1f + (skillLevels[index] - 1) * 0.15f);
-                DealDamage(target, PlayerAttackDamage * multiplier, true);
-                combatMessage = stageFlow.Phase == StageFlowPhase.BossBattle
-                    ? $"보스 스킬 {offset + 1} 발동"
-                    : $"사냥 스킬 {offset + 1} 발동";
+                float multiplier = (1.4f + offset * 0.35f) *
+                    (1f + (skillLevels[index] - 1) * 0.15f) * SkillAdvancementMultiplier;
+                int skillHits = 1 + advancementTier + (offset >= 2 ? 1 : 0);
+                for (int hit = 0; hit < skillHits; hit++)
+                {
+                    if (!enemies.Contains(target)) break;
+                    DealDamage(target, PlayerAttackDamage * multiplier / skillHits, true);
+                }
+                combatMessage = $"{(stageFlow.Phase == StageFlowPhase.BossBattle ? "보스" : "사냥")} 스킬 {offset + 1} · {skillHits}타";
                 break;
             }
         }
@@ -347,17 +344,30 @@ namespace PeanutWarrior.Prototype
                 long reward = 40L + stageFlow.Stage * 10L;
                 gold += reward;
                 fragments += 4;
-                combatMessage = $"보스 처치 +{reward}G +4조각";
+                diamonds += 2;
+                combatMessage = $"보스 처치 +{reward}G +4조각 +2다이아";
                 stageFlow.HandleBossDefeated();
             }
             else
             {
+                lifetimeKills++;
                 long reward = 2L + stageFlow.Stage;
                 gold += reward;
                 if (Random.value < 0.2f) fragments++;
+                AwardKillMilestoneDiamonds();
                 stageFlow.RegisterMonsterKill();
                 combatMessage = $"몬스터 처치 +{reward}G · {stageFlow.MonsterKills}/100";
             }
+        }
+
+        private void AwardKillMilestoneDiamonds()
+        {
+            int milestone = lifetimeKills / 25;
+            if (milestone <= lastDiamondMilestone) return;
+            int gained = milestone - lastDiamondMilestone;
+            lastDiamondMilestone = milestone;
+            diamonds += gained;
+            combatMessage = $"업적: 누적 {lifetimeKills}마리 · 다이아 +{gained}";
         }
 
         private void DamagePlayerFrom(EnemyUnit enemy, float damage, float interval)
@@ -369,38 +379,40 @@ namespace PeanutWarrior.Prototype
             if (playerHp > 0f) return;
 
             enemies.Clear();
-            playerHp = PlayerMaxHp;
-            playerMp = PlayerMaxMp;
+            FullRestore();
             if (stageFlow.Phase == StageFlowPhase.BossBattle) stageFlow.HandleBossBattleDeath();
             else stageFlow.HandleHuntingDeath();
         }
 
         private void SpawnNormalEnemy()
         {
-            float scale = 1f + ((stageFlow.World - 1) * 30 + stageFlow.Stage - 1) * 0.025f;
+            float scale = 1f + (GlobalStage - 1) * 0.025f;
             Vector2 spawn = RandomMapPoint();
-            if (Vector2.Distance(spawn, playerPosition) < 160f) spawn = new Vector2(MapRight - 20f, Random.Range(MapTop, MapBottom));
-            EnemyUnit enemy = new EnemyUnit
+            if (Vector2.Distance(spawn, playerPosition) < 160f)
+                spawn = new Vector2(MapRight - 20f, Random.Range(MapTop, MapBottom));
+
+            float hp = NormalEnemyBaseHp * scale;
+            enemies.Add(new EnemyUnit
             {
                 Position = spawn,
                 WanderTarget = RandomMapPoint(),
                 WanderTimer = Random.Range(1.5f, 4.5f),
-                Hp = NormalEnemyBaseHp * scale,
-                MaxHp = NormalEnemyBaseHp * scale,
+                Hp = hp,
+                MaxHp = hp,
                 AttackCooldown = 0.8f
-            };
-            enemies.Add(enemy);
+            });
         }
 
         private void SpawnBoss()
         {
-            float scale = 1f + ((stageFlow.World - 1) * 30 + stageFlow.Stage - 1) * 0.05f;
+            float scale = 1f + (GlobalStage - 1) * 0.05f;
+            float hp = BossBaseHp * scale;
             enemies.Add(new EnemyUnit
             {
                 Position = new Vector2(MapRight - 30f, (MapTop + MapBottom) * 0.5f),
                 WanderTarget = RandomMapPoint(),
-                Hp = BossBaseHp * scale,
-                MaxHp = BossBaseHp * scale,
+                Hp = hp,
+                MaxHp = hp,
                 AttackCooldown = 1f,
                 IsBoss = true
             });
@@ -420,6 +432,66 @@ namespace PeanutWarrior.Prototype
                 best = distance;
             }
             return closest;
+        }
+
+        private bool CanAdvance(out string reason)
+        {
+            if (advancementTier >= 2)
+            {
+                reason = "현재 프로토타입 최고 전직 단계";
+                return false;
+            }
+
+            int requiredStage = advancementTier == 0 ? 2 : 4;
+            int requiredPower = advancementTier == 0 ? 180 : 420;
+            long requiredGold = advancementTier == 0 ? 150L : 500L;
+            int requiredDiamonds = advancementTier == 0 ? 5 : 15;
+
+            if (GlobalStage < requiredStage) { reason = $"스테이지 {requiredStage} 필요"; return false; }
+            if (CombatPower < requiredPower) { reason = $"전투력 {requiredPower} 필요"; return false; }
+            if (gold < requiredGold) { reason = $"골드 {requiredGold} 필요"; return false; }
+            if (diamonds < requiredDiamonds) { reason = $"다이아 {requiredDiamonds} 필요"; return false; }
+            reason = "전직 가능";
+            return true;
+        }
+
+        private void TryAdvance()
+        {
+            if (!CanAdvance(out string reason))
+            {
+                combatMessage = reason;
+                return;
+            }
+
+            long goldCost = advancementTier == 0 ? 150L : 500L;
+            int diamondCost = advancementTier == 0 ? 5 : 15;
+            gold -= goldCost;
+            diamonds -= diamondCost;
+            advancementTier++;
+            if (advancementTier >= 2) miniSlotsUnlocked = true;
+            FullRestore();
+            combatMessage = $"전직 성공: {AdvancementName()} · 기본 공격 {BasicAttackHits}타";
+        }
+
+        private string AdvancementName()
+        {
+            return advancementTier switch
+            {
+                0 => "새싹 껍질",
+                1 => "전투 껍질",
+                2 => "황금 수호 껍질",
+                _ => $"전직 {advancementTier}단계"
+            };
+        }
+
+        private string AdvancementRequirementText()
+        {
+            if (advancementTier >= 2) return "최고 전직 달성";
+            int stage = advancementTier == 0 ? 2 : 4;
+            int power = advancementTier == 0 ? 180 : 420;
+            long requiredGold = advancementTier == 0 ? 150L : 500L;
+            int requiredDiamonds = advancementTier == 0 ? 5 : 15;
+            return $"조건: {stage}스테이지 / 전투력 {power} / {requiredGold}G / {requiredDiamonds}다이아";
         }
 
         private void BeginBossBattle()
@@ -473,20 +545,28 @@ namespace PeanutWarrior.Prototype
             Rect arena = new Rect(left, top, ArenaWidth, ArenaHeight);
             GUI.Box(arena, GUIContent.none);
 
-            GUI.Label(new Rect(left + 16f, top + 10f, 500f, 24f),
+            GUI.Label(new Rect(left + 16f, top + 10f, 490f, 24f),
                 $"{stageFlow.GetWorldDisplayName()} {stageFlow.World}-{stageFlow.Stage} · 처치 {stageFlow.MonsterKills}/100");
-            GUI.Label(new Rect(left + 16f, top + 34f, 520f, 24f), combatMessage);
-            GUI.Label(new Rect(left + 535f, top + 10f, 210f, 24f), $"골드 {gold} · 조각 {fragments}");
+            GUI.Label(new Rect(left + 16f, top + 34f, 500f, 24f), combatMessage);
+            GUI.Label(new Rect(left + 510f, top + 10f, 235f, 42f),
+                $"골드 {gold} · 조각 {fragments}\n다이아 {diamonds} · 전투력 {CombatPower}");
 
-            DrawBar(new Rect(left + 16f, top + 62f, 220f, 18f), playerHp, PlayerMaxHp, $"HP {Mathf.CeilToInt(playerHp)}/{Mathf.CeilToInt(PlayerMaxHp)}");
-            DrawBar(new Rect(left + 16f, top + 84f, 220f, 18f), playerMp, PlayerMaxMp, $"MP {Mathf.CeilToInt(playerMp)}/{Mathf.CeilToInt(PlayerMaxMp)}");
+            DrawBar(new Rect(left + 16f, top + 62f, 220f, 18f), playerHp, PlayerMaxHp,
+                $"HP {Mathf.CeilToInt(playerHp)}/{Mathf.CeilToInt(PlayerMaxHp)}");
+            DrawBar(new Rect(left + 16f, top + 84f, 220f, 18f), playerMp, PlayerMaxMp,
+                $"MP {Mathf.CeilToInt(playerMp)}/{Mathf.CeilToInt(PlayerMaxMp)}");
 
-            if (GUI.Button(new Rect(left + 255f, top + 58f, 112f, 40f), $"사냥검: {ElementName(huntingElement)}")) CycleElement(false);
-            if (GUI.Button(new Rect(left + 375f, top + 58f, 112f, 40f), $"보스검: {ElementName(bossElement)}")) CycleElement(true);
-            GUI.Label(new Rect(left + 500f, top + 70f, 220f, 22f), $"현재 속성: {ElementName(ActiveElement)}");
+            if (GUI.Button(new Rect(left + 250f, top + 58f, 110f, 40f), $"사냥검\n{ElementName(huntingElement)}")) CycleElement(false);
+            if (GUI.Button(new Rect(left + 365f, top + 58f, 110f, 40f), $"보스검\n{ElementName(bossElement)}")) CycleElement(true);
 
-            Rect playerRect = new Rect(left + playerPosition.x - 28f, top + playerPosition.y - 28f, 56f, 56f);
-            GUI.Box(playerRect, "땅콩\n전사");
+            GUI.Box(new Rect(left + 485f, top + 55f, 260f, 88f), GUIContent.none);
+            GUI.Label(new Rect(left + 495f, top + 60f, 245f, 22f), $"전직 {advancementTier}단계 · {AdvancementName()}");
+            GUI.Label(new Rect(left + 495f, top + 81f, 245f, 36f), AdvancementRequirementText());
+            if (GUI.Button(new Rect(left + 495f, top + 112f, 115f, 27f), "전직 시도")) TryAdvance();
+            GUI.Label(new Rect(left + 615f, top + 115f, 125f, 22f), miniSlotsUnlocked ? "미니 슬롯 3/3 해금" : "미니 슬롯 잠김");
+
+            Rect playerRect = new Rect(left + playerPosition.x - 30f, top + playerPosition.y - 30f, 60f, 60f);
+            GUI.Box(playerRect, $"{ShellMark()}\n전사");
 
             for (int i = 0; i < enemies.Count; i++)
             {
@@ -498,31 +578,39 @@ namespace PeanutWarrior.Prototype
                 DrawBar(new Rect(enemyRect.x, enemyRect.y - 13f, enemyRect.width, 10f), enemy.Hp, enemy.MaxHp, string.Empty);
             }
 
-            if (GUI.Button(new Rect(left + 500f, top + 100f, 110f, 34f), $"공격 Lv.{attackLevel}\n{AttackUpgradeCost}G") && gold >= AttackUpgradeCost)
+            if (GUI.Button(new Rect(left + 500f, top + 150f, 110f, 34f), $"공격 Lv.{attackLevel}\n{AttackUpgradeCost}G") && gold >= AttackUpgradeCost)
             {
                 gold -= AttackUpgradeCost;
                 attackLevel++;
             }
-            if (GUI.Button(new Rect(left + 620f, top + 100f, 110f, 34f), $"체력 Lv.{hpLevel}\n{HpUpgradeCost}G") && gold >= HpUpgradeCost)
+            if (GUI.Button(new Rect(left + 620f, top + 150f, 110f, 34f), $"체력 Lv.{hpLevel}\n{HpUpgradeCost}G") && gold >= HpUpgradeCost)
             {
                 gold -= HpUpgradeCost;
                 hpLevel++;
                 playerHp = PlayerMaxHp;
             }
-            if (GUI.Button(new Rect(left + 500f, top + 140f, 110f, 34f), $"최대MP Lv.{maxMpLevel}\n{MaxMpUpgradeCost}G") && gold >= MaxMpUpgradeCost)
+            if (GUI.Button(new Rect(left + 500f, top + 190f, 110f, 34f), $"최대MP Lv.{maxMpLevel}\n{MaxMpUpgradeCost}G") && gold >= MaxMpUpgradeCost)
             {
                 gold -= MaxMpUpgradeCost;
                 maxMpLevel++;
                 playerMp = PlayerMaxMp;
             }
-            if (GUI.Button(new Rect(left + 620f, top + 140f, 110f, 34f), $"MP회복 Lv.{mpRegenLevel}\n{MpRegenUpgradeCost}G") && gold >= MpRegenUpgradeCost)
+            if (GUI.Button(new Rect(left + 620f, top + 190f, 110f, 34f), $"MP회복 Lv.{mpRegenLevel}\n{MpRegenUpgradeCost}G") && gold >= MpRegenUpgradeCost)
             {
                 gold -= MpRegenUpgradeCost;
                 mpRegenLevel++;
             }
+        }
 
-            GUI.Label(new Rect(left + 500f, top + 182f, 220f, 70f),
-                "무: 4타 후 추가참격\n화: 화상 지속피해\n빙: 이동속도 감소\n뇌: 주변 연쇄피해");
+        private string ShellMark()
+        {
+            return advancementTier switch
+            {
+                0 => "새싹",
+                1 => "전투",
+                2 => "황금",
+                _ => "강화"
+            };
         }
 
         private static string ElementName(SwordElement element)

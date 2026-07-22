@@ -128,6 +128,14 @@ namespace PeanutWarrior.Prototype
             return true;
         }
 
+        public void RestoreTier(int restoredTier, bool restoreVitals = true)
+        {
+            tier = Mathf.Clamp(restoredTier, 0, MaxTier);
+            ApplyTier(restoreVitals);
+            lastMessage = $"전직 데이터 복구 · {CurrentName}";
+            AdvancementChanged?.Invoke();
+        }
+
         public string GetRequirementSummary()
         {
             PeanutGameRules.AdvancementDefinition next = NextDefinition;

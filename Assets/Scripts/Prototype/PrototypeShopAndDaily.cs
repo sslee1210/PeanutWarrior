@@ -135,7 +135,7 @@ namespace PeanutWarrior.Prototype
             }
             else
             {
-                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · {(equipForBoss ? "균왕" : "사냥")} 장착";
+                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · {(equipForBoss ? "보스" : "사냥")} 장착";
             }
             Save();
         }

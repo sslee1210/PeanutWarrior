@@ -6,10 +6,9 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Removes old prototype IMGUI panels once the consolidated mobile UI is active.
-    /// Components that own gameplay logic are disabled and their lifecycle methods are
-    /// forwarded manually. The runtime world renderer stays enabled because it owns the
-    /// visible battlefield and must continue running normally.
+    /// Disables legacy prototype IMGUI panels after the uGUI Canvas is ready.
+    /// Gameplay lifecycle methods are forwarded manually so combat, saving,
+    /// missions and progression remain active without drawing debug controls.
     /// </summary>
     [DefaultExecutionOrder(32000)]
     public sealed class LegacyGuiSuppressor : MonoBehaviour
@@ -54,36 +53,34 @@ namespace PeanutWarrior.Prototype
                 return;
             }
 
-            InvokeLifecycle(nameof(Update), entry => entry.UpdateMethod);
-
+            InvokeLifecycle("Update", entry => entry.UpdateMethod);
             rescanTimer -= Time.unscaledDeltaTime;
             if (rescanTimer <= 0f)
             {
                 rescanTimer = 1f;
-                CaptureNewLegacyGuiComponents();
+                CaptureLegacyGuiComponents();
             }
         }
 
         private void FixedUpdate()
         {
-            if (!suppressionActive) return;
-            InvokeLifecycle(nameof(FixedUpdate), entry => entry.FixedUpdateMethod);
+            if (suppressionActive) InvokeLifecycle("FixedUpdate", entry => entry.FixedUpdateMethod);
         }
 
         private void LateUpdate()
         {
-            if (!suppressionActive) return;
-            InvokeLifecycle(nameof(LateUpdate), entry => entry.LateUpdateMethod);
+            if (suppressionActive) InvokeLifecycle("LateUpdate", entry => entry.LateUpdateMethod);
         }
 
         private void TryActivateSuppression()
         {
-            if (FindFirstObjectByType<MobileIdleUiPrototype>() == null) return;
+            PeanutMobileCanvasPrototype canvasUi = FindFirstObjectByType<PeanutMobileCanvasPrototype>();
+            if (canvasUi == null || !canvasUi.enabled) return;
             suppressionActive = true;
-            CaptureNewLegacyGuiComponents();
+            CaptureLegacyGuiComponents();
         }
 
-        private void CaptureNewLegacyGuiComponents()
+        private void CaptureLegacyGuiComponents()
         {
             MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
             for (int i = 0; i < behaviours.Length; i++)
@@ -94,11 +91,10 @@ namespace PeanutWarrior.Prototype
 
                 Type type = behaviour.GetType();
                 if (type.Namespace != typeof(LegacyGuiSuppressor).Namespace) continue;
-
                 MethodInfo onGui = type.GetMethod("OnGUI", LifecycleFlags, null, Type.EmptyTypes, null);
                 if (onGui == null) continue;
 
-                SuppressedBehaviour entry = new SuppressedBehaviour
+                suppressed.Add(new SuppressedBehaviour
                 {
                     Behaviour = behaviour,
                     UpdateMethod = FindNoArgMethod(type, "Update"),
@@ -107,9 +103,7 @@ namespace PeanutWarrior.Prototype
                     PauseMethod = type.GetMethod("OnApplicationPause", LifecycleFlags, null, new[] { typeof(bool) }, null),
                     FocusMethod = type.GetMethod("OnApplicationFocus", LifecycleFlags, null, new[] { typeof(bool) }, null),
                     QuitMethod = FindNoArgMethod(type, "OnApplicationQuit")
-                };
-
-                suppressed.Add(entry);
+                });
                 behaviour.enabled = false;
             }
         }
@@ -117,25 +111,23 @@ namespace PeanutWarrior.Prototype
         private bool ShouldRemainEnabled(MonoBehaviour behaviour)
         {
             return behaviour == this ||
-                   behaviour is MobileIdleUiPrototype ||
+                   behaviour is PeanutMobileCanvasPrototype ||
                    behaviour is RuntimeWorldViewPrototype;
         }
 
         private bool IsAlreadySuppressed(MonoBehaviour behaviour)
         {
             for (int i = 0; i < suppressed.Count; i++)
-            {
                 if (suppressed[i].Behaviour == behaviour) return true;
-            }
             return false;
         }
 
-        private static MethodInfo FindNoArgMethod(Type type, string methodName)
+        private static MethodInfo FindNoArgMethod(Type type, string name)
         {
-            return type.GetMethod(methodName, LifecycleFlags, null, Type.EmptyTypes, null);
+            return type.GetMethod(name, LifecycleFlags, null, Type.EmptyTypes, null);
         }
 
-        private void InvokeLifecycle(string lifecycleName, Func<SuppressedBehaviour, MethodInfo> selector)
+        private void InvokeLifecycle(string lifecycle, Func<SuppressedBehaviour, MethodInfo> selector)
         {
             for (int i = suppressed.Count - 1; i >= 0; i--)
             {
@@ -145,18 +137,12 @@ namespace PeanutWarrior.Prototype
                     suppressed.RemoveAt(i);
                     continue;
                 }
-
                 MethodInfo method = selector(entry);
-                if (method == null) continue;
-                InvokeSafely(entry.Behaviour, method, null, lifecycleName);
+                if (method != null) InvokeSafely(entry.Behaviour, method, null, lifecycle);
             }
         }
 
-        private static void InvokeSafely(
-            MonoBehaviour target,
-            MethodInfo method,
-            object[] arguments,
-            string lifecycleName)
+        private static void InvokeSafely(MonoBehaviour target, MethodInfo method, object[] arguments, string lifecycle)
         {
             try
             {
@@ -168,24 +154,21 @@ namespace PeanutWarrior.Prototype
             }
             catch (Exception exception)
             {
-                Debug.LogError($"[PeanutWarrior] Legacy {lifecycleName} forwarding failed: {exception.Message}", target);
+                Debug.LogError($"[PeanutWarrior] Legacy {lifecycle} forwarding failed: {exception.Message}", target);
             }
         }
 
         private void OnApplicationPause(bool paused)
         {
-            ForwardBooleanLifecycle(paused, entry => entry.PauseMethod, "OnApplicationPause");
+            ForwardBoolean(paused, entry => entry.PauseMethod, "OnApplicationPause");
         }
 
         private void OnApplicationFocus(bool focused)
         {
-            ForwardBooleanLifecycle(focused, entry => entry.FocusMethod, "OnApplicationFocus");
+            ForwardBoolean(focused, entry => entry.FocusMethod, "OnApplicationFocus");
         }
 
-        private void ForwardBooleanLifecycle(
-            bool value,
-            Func<SuppressedBehaviour, MethodInfo> selector,
-            string lifecycleName)
+        private void ForwardBoolean(bool value, Func<SuppressedBehaviour, MethodInfo> selector, string lifecycle)
         {
             object[] arguments = { value };
             for (int i = 0; i < suppressed.Count; i++)
@@ -193,7 +176,7 @@ namespace PeanutWarrior.Prototype
                 SuppressedBehaviour entry = suppressed[i];
                 if (entry.Behaviour == null) continue;
                 MethodInfo method = selector(entry);
-                if (method != null) InvokeSafely(entry.Behaviour, method, arguments, lifecycleName);
+                if (method != null) InvokeSafely(entry.Behaviour, method, arguments, lifecycle);
             }
         }
 

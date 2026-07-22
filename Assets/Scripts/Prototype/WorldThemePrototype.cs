@@ -29,7 +29,7 @@ namespace PeanutWarrior.Prototype
 
         private static readonly string[] BossNames =
         {
-            "땅콩밭 균왕", "창고 포자군주", "포식자의 우두머리",
+            "땅콩밭 보스", "창고 포자군주", "포식자의 우두머리",
             "빙결 저장고 군주", "화염 차원의 침략자", "균열 중심체"
         };
 
@@ -158,7 +158,7 @@ namespace PeanutWarrior.Prototype
         public string CurrentThemeDescription()
         {
             int theme = ThemeIndex;
-            return $"{stageFlow.GetWorldDisplayName()} · 균왕 {BossNames[theme]}";
+            return $"{stageFlow.GetWorldDisplayName()} · 보스 {BossNames[theme]}";
         }
 
         private static Transform FindDeepChild(Transform parent, string name)

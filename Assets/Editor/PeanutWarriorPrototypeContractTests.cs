@@ -67,6 +67,17 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
+        public void NewProtectionAndRewardSystems_ExposeStableContracts()
+        {
+            Assert.NotNull(typeof(PrototypeSaveIntegrityGuard).GetMethod("TryRestoreBackup", PublicInstance));
+            Assert.NotNull(typeof(PrototypeSaveIntegrityGuard).GetProperty("SchemaVersion", PublicInstance));
+            Assert.NotNull(typeof(FirstClearRewardPrototype).GetProperty("BossKills", PublicInstance));
+            Assert.NotNull(typeof(FirstClearRewardPrototype).GetProperty("UniqueClears", PublicInstance));
+            Assert.NotNull(typeof(CombatEffectWorldViewPrototype).GetProperty("ActiveEffectCount", PublicInstance));
+            Assert.NotNull(typeof(PeanutCanvasLayoutGuard).GetProperty("RepairedBars", PublicInstance));
+        }
+
+        [Test]
         public void ShopAndIdlePrivateActions_MatchUiBindings()
         {
             Assert.NotNull(typeof(PrototypeShopAndDaily).GetMethod("ClaimDailyReward", PrivateInstance));

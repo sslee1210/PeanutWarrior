@@ -47,27 +47,70 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
-        public void SwordProgression_ExposesStablePublicContracts()
+        public void Growth_ContainsOnlyTheFinalSupportingFields()
         {
+            TypeAssert.IsSubclassOf(typeof(MonoBehaviour), typeof(GrowthExpansionPrototype));
+            string[] requiredFields =
+            {
+                "critChanceLevel", "critDamageLevel", "goldGainLevel", "hpRegenLevel",
+                "expGainLevel", "equipmentGainLevel"
+            };
+            foreach (string field in requiredFields)
+                Assert.NotNull(typeof(GrowthExpansionPrototype).GetField(field, PrivateInstance), field);
+
+            Assert.NotNull(typeof(GrowthExpansionPrototype).GetProperty("CriticalChance", PublicInstance));
+            Assert.NotNull(typeof(GrowthExpansionPrototype).GetProperty("ExperienceMultiplier", PublicInstance));
+            Assert.NotNull(typeof(GrowthExpansionPrototype).GetProperty("EquipmentMaterialMultiplier", PublicInstance));
+            Assert.NotNull(typeof(GrowthExpansionPrototype).GetProperty("EquipmentEnhancementMaterials", PublicInstance));
+        }
+
+        [Test]
+        public void SkillAuto_UsesOneGlobalControl()
+        {
+            Assert.NotNull(typeof(SkillManagementPrototype).GetProperty("GlobalAutoEnabled", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("ToggleGlobalAuto", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("SetGlobalAuto", PublicInstance));
+            Assert.IsTrue(typeof(GlobalSkillAutoGatePrototype).IsSubclassOf(typeof(MonoBehaviour)));
+        }
+
+        [Test]
+        public void SwordGrades_AreRareEpicUniqueLegend()
+        {
+            Assert.AreEqual(1, (int)SwordProgressionPrototype.SwordRarity.Rare);
+            Assert.AreEqual(2, (int)SwordProgressionPrototype.SwordRarity.Epic);
+            Assert.AreEqual(3, (int)SwordProgressionPrototype.SwordRarity.Unique);
+            Assert.AreEqual(4, (int)SwordProgressionPrototype.SwordRarity.Legend);
+            Assert.AreEqual("레어", SwordProgressionPrototype.RarityName(SwordProgressionPrototype.SwordRarity.Rare));
+            Assert.AreEqual("레전드", SwordProgressionPrototype.RarityName(SwordProgressionPrototype.SwordRarity.Legend));
             Assert.NotNull(typeof(SwordProgressionPrototype).GetMethod("RegisterSummon", PublicInstance));
             Assert.NotNull(typeof(SwordProgressionPrototype).GetMethod("ManualSynthesize", PublicInstance));
-            Assert.NotNull(typeof(SwordProgressionPrototype).GetMethod("UpgradeSword", PublicInstance));
             Assert.NotNull(typeof(SwordProgressionPrototype).GetMethod("GetDamageMultiplier", PublicInstance));
         }
 
         [Test]
-        public void Canvas_UsesSimplifiedDevelopmentMenuContract()
+        public void Canvas_UsesSixTabsTopStageSelectorAndGlobalAuto()
         {
             Assert.IsTrue(typeof(PeanutMobileCanvasPrototype).IsSubclassOf(typeof(MonoBehaviour)));
             Assert.NotNull(typeof(PeanutMobileCanvasPrototype).GetProperty("BottomMenuCount", PublicInstance));
             Assert.NotNull(typeof(PeanutMobileCanvasPrototype).GetProperty("UsesSimplifiedGrowthMenu", PublicInstance));
+            Assert.NotNull(typeof(PeanutMobileCanvasPrototype).GetProperty("UsesGlobalSkillAuto", PublicInstance));
+            Assert.NotNull(typeof(PeanutMobileCanvasPrototype).GetProperty("HasTopStageSelector", PublicInstance));
             Assert.IsTrue(typeof(RuntimeWorldViewPrototype).IsSubclassOf(typeof(MonoBehaviour)));
             Assert.IsTrue(typeof(BossPatternWorldViewPrototype).IsSubclassOf(typeof(MonoBehaviour)));
-            Assert.IsTrue(typeof(WorldThemePrototype).IsSubclassOf(typeof(MonoBehaviour)));
         }
 
         [Test]
-        public void NewProtectionAndRewardSystems_ExposeStableContracts()
+        public void BossController_HasTimerButNoManualDodgeFields()
+        {
+            Assert.NotNull(typeof(BossPatternPrototype).GetProperty("RemainingTime", PublicInstance));
+            Assert.NotNull(typeof(BossPatternPrototype).GetProperty("EncounterActive", PublicInstance));
+            Assert.IsNull(typeof(BossPatternPrototype).GetField("warningTimer", PrivateInstance));
+            Assert.IsNull(typeof(BossPatternPrototype).GetField("warningCenter", PrivateInstance));
+            Assert.IsNull(typeof(BossPatternPrototype).GetField("warningRadius", PrivateInstance));
+        }
+
+        [Test]
+        public void ProtectionRewardAndShopContractsRemainAvailable()
         {
             Assert.NotNull(typeof(PrototypeSaveIntegrityGuard).GetMethod("TryRestoreBackup", PublicInstance));
             Assert.NotNull(typeof(PrototypeSaveIntegrityGuard).GetProperty("SchemaVersion", PublicInstance));
@@ -75,18 +118,10 @@ namespace PeanutWarrior.Tests
             Assert.NotNull(typeof(FirstClearRewardPrototype).GetProperty("UniqueClears", PublicInstance));
             Assert.NotNull(typeof(CombatEffectWorldViewPrototype).GetProperty("ActiveEffectCount", PublicInstance));
             Assert.NotNull(typeof(PeanutCanvasLayoutGuard).GetProperty("RepairedBars", PublicInstance));
-        }
-
-        [Test]
-        public void ShopAndIdlePrivateActions_MatchUiBindings()
-        {
             Assert.NotNull(typeof(PrototypeShopAndDaily).GetMethod("ClaimDailyReward", PrivateInstance));
             Assert.NotNull(typeof(PrototypeShopAndDaily).GetMethod("SummonSword", PrivateInstance));
             Assert.NotNull(typeof(PrototypeShopAndDaily).GetMethod("BuyEgg", PrivateInstance));
             Assert.NotNull(typeof(IdleSystemsPrototype).GetMethod("StartIncubation", PrivateInstance));
-            Assert.NotNull(typeof(IdleSystemsPrototype).GetMethod("ClaimKillMission", PrivateInstance));
-            Assert.NotNull(typeof(IdleSystemsPrototype).GetMethod("ClaimStageMission", PrivateInstance));
-            Assert.NotNull(typeof(IdleSystemsPrototype).GetMethod("ClaimGrowthAchievement", PrivateInstance));
         }
     }
 }

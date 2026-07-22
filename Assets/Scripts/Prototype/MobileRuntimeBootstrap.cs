@@ -3,8 +3,8 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Applies mobile-oriented runtime defaults without requiring scene setup.
-    /// Also exposes a lightweight safe-area overlay and performance toggle.
+    /// Applies mobile runtime defaults. The game is designed for a landscape
+    /// battlefield, so portrait rotation is disabled on Android and iOS.
     /// </summary>
     public sealed class MobileRuntimeBootstrap : MonoBehaviour
     {
@@ -29,19 +29,18 @@ namespace PeanutWarrior.Prototype
             QualitySettings.vSyncCount = 0;
             ApplyPerformanceMode(false);
 #if UNITY_ANDROID || UNITY_IOS
-            Screen.orientation = ScreenOrientation.Portrait;
-            Screen.autorotateToPortrait = true;
+            Screen.orientation = ScreenOrientation.AutoRotation;
+            Screen.autorotateToPortrait = false;
             Screen.autorotateToPortraitUpsideDown = false;
-            Screen.autorotateToLandscapeLeft = false;
-            Screen.autorotateToLandscapeRight = false;
+            Screen.autorotateToLandscapeLeft = true;
+            Screen.autorotateToLandscapeRight = true;
 #endif
             lastSafeArea = Screen.safeArea;
         }
 
         private void Update()
         {
-            if (lastSafeArea != Screen.safeArea)
-                lastSafeArea = Screen.safeArea;
+            if (lastSafeArea != Screen.safeArea) lastSafeArea = Screen.safeArea;
         }
 
         private void ApplyPerformanceMode(bool saver)

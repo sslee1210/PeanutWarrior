@@ -85,6 +85,14 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
+        public void BattleSkillDock_HidesLegacyBlocksAndUsesCircularIcons()
+        {
+            Assert.NotNull(typeof(BattleSkillDockV6).GetProperty("HidesLegacySkillBlocks", PublicInstance));
+            Assert.NotNull(typeof(BattleSkillDockV6).GetProperty("UsesCircularBattleSkills", PublicInstance));
+            Assert.NotNull(typeof(BattleSkillDockV6).GetProperty("AutoButtonIsTopLeft", PublicInstance));
+        }
+
+        [Test]
         public void Shop_ExposesPurposeSpecificSwordSummons()
         {
             Assert.NotNull(typeof(PrototypeShopAndDaily).GetMethod(

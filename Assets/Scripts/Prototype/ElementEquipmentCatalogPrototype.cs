@@ -71,13 +71,12 @@ namespace PeanutWarrior.Prototype
             public string StyleName;
             public int HitCount;
             public float TotalDamageRatio;
-            public float ExecuteThreshold;
-            public float ExecuteBonusRatio;
+            public float ExecuteChance;
         }
 
         private const string Prefix = "PeanutWarrior.ElementEquipment.";
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
-        private const int CurrentSchemaVersion = 4;
+        private const int CurrentSchemaVersion = 5;
         private const int ElementCount = 4;
         private const int RarityCount = 4;
         private const int VariantsPerRarity = 3;
@@ -138,6 +137,7 @@ namespace PeanutWarrior.Prototype
         public bool UsesUnifiedEquipmentEntries => true;
         public bool ShowsDualBattleEffects => true;
         public bool ChangesAttackPatternByBattleMode => true;
+        public bool ExecutionUsesExtremeRandomInstantKill => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -269,7 +269,7 @@ namespace PeanutWarrior.Prototype
                 return Fail($"장비 강화 재료 {cost:N0}개 필요");
 
             levels[itemId]++;
-            lastMessage = $"{definitions[itemId].Name} Lv.{levels[itemId]} 강화 · 두 전투 모드 동시 성장";
+            lastMessage = $"{definitions[itemId].Name} Lv.{levels[itemId]} 강화 · 처형 확률은 등급 고정";
             Save();
             return true;
         }
@@ -401,8 +401,7 @@ namespace PeanutWarrior.Prototype
                         StyleName = "집중 참격",
                         HitCount = 1,
                         TotalDamageRatio = (0.50f + growthPower) * elementDamage,
-                        ExecuteThreshold = 0f,
-                        ExecuteBonusRatio = 0f
+                        ExecuteChance = 0f
                     };
                 case BossAttackStyle.RapidPierce:
                     return new BossModeProfile
@@ -411,18 +410,16 @@ namespace PeanutWarrior.Prototype
                         StyleName = "단일 연속 타격",
                         HitCount = 2 + rarity + lightningHit,
                         TotalDamageRatio = (0.46f + growthPower) * elementDamage,
-                        ExecuteThreshold = 0f,
-                        ExecuteBonusRatio = 0f
+                        ExecuteChance = 0f
                     };
                 default:
                     return new BossModeProfile
                     {
                         Style = BossAttackStyle.Execution,
-                        StyleName = "처형 참격",
+                        StyleName = "극저확률 처형",
                         HitCount = 1,
                         TotalDamageRatio = (0.42f + growthPower) * elementDamage,
-                        ExecuteThreshold = 0.25f + rarity * 0.025f,
-                        ExecuteBonusRatio = (0.30f + rarity * 0.08f) * elementDamage
+                        ExecuteChance = GetExecutionChanceByRarity(rarity)
                     };
             }
         }
@@ -439,6 +436,12 @@ namespace PeanutWarrior.Prototype
             return 1f + GetBossModeProfile(itemId).TotalDamageRatio;
         }
 
+        public float GetExecutionChance(int itemId)
+        {
+            BossModeProfile profile = GetBossModeProfile(itemId);
+            return profile.Style == BossAttackStyle.Execution ? profile.ExecuteChance : 0f;
+        }
+
         public string GetHuntingEffectDescription(int itemId)
         {
             HuntingModeProfile profile = GetHuntingModeProfile(itemId);
@@ -451,7 +454,13 @@ namespace PeanutWarrior.Prototype
             if (profile.Style == BossAttackStyle.RapidPierce)
                 return $"보스 · {profile.StyleName} · 단일 1명 {profile.HitCount}타 · 총 {profile.TotalDamageRatio * 100f:0}%";
             if (profile.Style == BossAttackStyle.Execution)
-                return $"보스 · {profile.StyleName} · 단일 1명 · HP {profile.ExecuteThreshold * 100f:0}% 이하 추가 {profile.ExecuteBonusRatio * 100f:0}%";
+            {
+                float chancePercent = profile.ExecuteChance * 100f;
+                int odds = profile.ExecuteChance > 0f
+                    ? Mathf.Max(1, Mathf.RoundToInt(1f / profile.ExecuteChance))
+                    : 0;
+                return $"보스 · {profile.StyleName} · 단일 1명 · 즉사 {chancePercent:0.####}% · 약 {odds:N0}분의 1";
+            }
             return $"보스 · {profile.StyleName} · 단일 1명 · 공격력 {profile.TotalDamageRatio * 100f:0}%";
         }
 
@@ -487,6 +496,18 @@ namespace PeanutWarrior.Prototype
             };
         }
 
+        private static float GetExecutionChanceByRarity(int rarity)
+        {
+            return rarity switch
+            {
+                1 => 0.000001f,
+                2 => 0.0000025f,
+                3 => 0.000005f,
+                4 => 0.00001f,
+                _ => 0f
+            };
+        }
+
         private static HuntingModeProfile DefaultHuntingProfile()
         {
             return new HuntingModeProfile
@@ -508,8 +529,7 @@ namespace PeanutWarrior.Prototype
                 StyleName = "집중 참격",
                 HitCount = 1,
                 TotalDamageRatio = 0.35f,
-                ExecuteThreshold = 0f,
-                ExecuteBonusRatio = 0f
+                ExecuteChance = 0f
             };
         }
 
@@ -557,7 +577,7 @@ namespace PeanutWarrior.Prototype
             if (schemaVersion < CurrentSchemaVersion)
             {
                 schemaVersion = CurrentSchemaVersion;
-                lastMessage = "장비 효과를 사냥 범위형·보스 집중형 전투 모드로 변환 완료";
+                lastMessage = "처형 효과를 극저확률 보스 즉사 방식으로 변환 완료";
             }
         }
 

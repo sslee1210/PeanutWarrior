@@ -37,14 +37,16 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
-        public void Equipment_SeparatesHuntingAndBossCatalogs()
+        public void Equipment_UsesUnifiedEntriesWithDualEffects()
         {
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("TotalItemCount", PublicInstance));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("ItemCountPerUse", PublicInstance));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("UsesSeparateHuntingAndBossCatalogs", PublicInstance));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod(
-                "GetItemId", PublicInstance, null,
-                new[] { typeof(bool), typeof(int), typeof(int), typeof(int) }, null));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("UnifiedItemCount", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("UsesUnifiedEquipmentEntries", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("ShowsDualBattleEffects", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetUnifiedItemId", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetHuntingEffectDescription", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetBossEffectDescription", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetHuntingDamageMultiplier", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetBossDamageMultiplier", PublicInstance));
         }
 
         [Test]
@@ -52,19 +54,24 @@ namespace PeanutWarrior.Tests
         {
             Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesSplitGrowthLayout", PublicInstance));
             Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesPerTierAdvancementButtons", PublicInstance));
-            Assert.NotNull(typeof(PeanutEquipmentAndShopMenuV5).GetProperty("UsesSeparateHuntingAndBossTabs", PublicInstance));
+            Assert.NotNull(typeof(PeanutEquipmentAndShopMenuV5).GetProperty("UsesUnifiedDualEffectCards", PublicInstance));
             Assert.NotNull(typeof(BottomNavigationOrderV4).GetProperty("BottomMenuOrder", PublicInstance));
             Assert.NotNull(typeof(MenuLayoutCoordinatorV6).GetProperty("UsesSingleOwnerPerPage", PublicInstance));
             Assert.NotNull(typeof(MenuLayoutCoordinatorV6).GetProperty("CurrentOwner", PublicInstance));
         }
 
         [Test]
-        public void SkillMenu_IsCardlessAndUsesNamedIcons()
+        public void SkillMenu_IsCardlessAndShowsAccurateDetails()
         {
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("SkillIconCount", PublicInstance));
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("UsesCardlessSkillLayout", PublicInstance));
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("UsesNamedSkillSilhouettes", PublicInstance));
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("AutoButtonIsTopLeft", PublicInstance));
+            Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("UsesSkillDetailWindow", PublicInstance));
+            Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("ShowsAccurateDamageDetails", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillDescription", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillTotalDamage", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillCombatSummary", PublicInstance));
         }
 
         [Test]
@@ -77,12 +84,12 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
-        public void Shop_ExposesPurposeSpecificSwordSummons()
+        public void Shop_UsesOneDualEffectSwordSummon()
         {
             Assert.NotNull(typeof(PrototypeShopAndDaily).GetMethod(
-                "TrySummonSword", PublicInstance, null, new[] { typeof(bool) }, null));
-            Assert.NotNull(typeof(PrototypeShopAndDaily).GetProperty("HuntingSwordSummons", PublicInstance));
-            Assert.NotNull(typeof(PrototypeShopAndDaily).GetProperty("BossSwordSummons", PublicInstance));
+                "TrySummonSword", PublicInstance, null, System.Type.EmptyTypes, null));
+            Assert.NotNull(typeof(PrototypeShopAndDaily).GetProperty("UsesUnifiedSwordSummon", PublicInstance));
+            Assert.NotNull(typeof(PrototypeShopAndDaily).GetProperty("TotalSwordSummons", PublicInstance));
         }
 
         [Test]

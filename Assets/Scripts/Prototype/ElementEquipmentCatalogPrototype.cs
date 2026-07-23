@@ -8,8 +8,6 @@ namespace PeanutWarrior.Prototype
     [DefaultExecutionOrder(7400)]
     public sealed class ElementEquipmentCatalogPrototype : MonoBehaviour
     {
-        // Kept for compatibility with older saves and callers. A definition is now a
-        // single piece of equipment and is no longer restricted to one battle type.
         public enum EquipmentUse
         {
             Hunting = 0,
@@ -32,6 +30,20 @@ namespace PeanutWarrior.Prototype
             Legend = 4
         }
 
+        public enum HuntingAttackStyle
+        {
+            Cleave = 0,
+            AreaBurst = 1,
+            Chain = 2
+        }
+
+        public enum BossAttackStyle
+        {
+            FocusStrike = 0,
+            RapidPierce = 1,
+            Execution = 2
+        }
+
         [Serializable]
         public sealed class EquipmentDefinition
         {
@@ -43,9 +55,29 @@ namespace PeanutWarrior.Prototype
             public int Variant;
         }
 
+        public struct HuntingModeProfile
+        {
+            public HuntingAttackStyle Style;
+            public string StyleName;
+            public int MaxTargets;
+            public float Radius;
+            public float DamageRatio;
+            public float ChainFalloff;
+        }
+
+        public struct BossModeProfile
+        {
+            public BossAttackStyle Style;
+            public string StyleName;
+            public int HitCount;
+            public float TotalDamageRatio;
+            public float ExecuteThreshold;
+            public float ExecuteBonusRatio;
+        }
+
         private const string Prefix = "PeanutWarrior.ElementEquipment.";
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
-        private const int CurrentSchemaVersion = 3;
+        private const int CurrentSchemaVersion = 4;
         private const int ElementCount = 4;
         private const int RarityCount = 4;
         private const int VariantsPerRarity = 3;
@@ -93,7 +125,7 @@ namespace PeanutWarrior.Prototype
         private int bossItem = -1;
         private int schemaVersion;
         private bool legacyMigrated;
-        private string lastMessage = "통합 장비 도감 준비";
+        private string lastMessage = "전투 모드 변환 장비 준비";
 
         public int TotalItemCount => ItemCount;
         public int UnifiedItemCount => ItemCount;
@@ -105,6 +137,7 @@ namespace PeanutWarrior.Prototype
         public bool UsesSeparateHuntingAndBossCatalogs => false;
         public bool UsesUnifiedEquipmentEntries => true;
         public bool ShowsDualBattleEffects => true;
+        public bool ChangesAttackPatternByBattleMode => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -203,10 +236,7 @@ namespace PeanutWarrior.Prototype
             return IsValidItem(itemId) ? copies[itemId] : 0;
         }
 
-        public bool IsOwned(int itemId)
-        {
-            return GetCopies(itemId) > 0;
-        }
+        public bool IsOwned(int itemId) => GetCopies(itemId) > 0;
 
         public int GetOwnedCount(bool boss, int elementIndex, int rarityIndex)
         {
@@ -225,8 +255,7 @@ namespace PeanutWarrior.Prototype
         {
             itemId = CanonicalItemId(itemId);
             if (!IsValidItem(itemId)) return int.MaxValue;
-            EquipmentDefinition definition = definitions[itemId];
-            int rarity = (int)definition.Rarity;
+            int rarity = (int)definitions[itemId].Rarity;
             return Mathf.Max(1, rarity * 3 + levels[itemId] * rarity * 2);
         }
 
@@ -240,7 +269,7 @@ namespace PeanutWarrior.Prototype
                 return Fail($"장비 강화 재료 {cost:N0}개 필요");
 
             levels[itemId]++;
-            lastMessage = $"{definitions[itemId].Name} Lv.{levels[itemId]} 강화";
+            lastMessage = $"{definitions[itemId].Name} Lv.{levels[itemId]} 강화 · 두 전투 모드 동시 성장";
             Save();
             return true;
         }
@@ -266,7 +295,7 @@ namespace PeanutWarrior.Prototype
             copies[selected]++;
             if (copies[selected] > 1 && copies[selected] % 3 == 0) levels[selected]++;
             EquipmentDefinition definition = definitions[selected];
-            lastMessage = $"{definition.Name} 획득 · 보유 {copies[selected]} · 사냥/보스 효과 동시 해금";
+            lastMessage = $"{definition.Name} 획득 · 사냥 패턴과 보스 패턴 동시 해금";
             RepairEquippedItems();
             Save();
         }
@@ -284,60 +313,146 @@ namespace PeanutWarrior.Prototype
 
             if (boss) bossItem = itemId;
             else huntingItem = itemId;
-            lastMessage = $"{definition.Name} · {(boss ? "보스" : "사냥")} 슬롯 장착";
+            lastMessage = $"{definition.Name} · {(boss ? "보스 집중" : "사냥 범위")} 모드 장착";
             Save();
             return true;
         }
 
-        public int GetEquippedItem(bool boss)
-        {
-            return boss ? bossItem : huntingItem;
-        }
+        public int GetEquippedItem(bool boss) => boss ? bossItem : huntingItem;
 
         public bool IsEquipped(int itemId, bool boss)
         {
             return GetEquippedItem(boss) == CanonicalItemId(itemId);
         }
 
-        public float GetItemDamageMultiplier(int itemId)
+        public HuntingModeProfile GetHuntingModeProfile(int itemId)
         {
-            return GetHuntingDamageMultiplier(itemId);
+            itemId = CanonicalItemId(itemId);
+            if (!IsValidItem(itemId)) return DefaultHuntingProfile();
+            EquipmentDefinition definition = definitions[itemId];
+            int rarity = (int)definition.Rarity;
+            int level = GetLevel(itemId);
+            int ownedCopies = GetCopies(itemId);
+            float growthPower = rarity * 0.075f + Mathf.Max(0, level - 1) * 0.014f +
+                                Mathf.Min(0.10f, Mathf.Max(0, ownedCopies - 1) * 0.012f);
+            float elementDamage = definition.Element == EquipmentElement.Fire ? 1.08f :
+                                  definition.Element == EquipmentElement.Ice ? 0.97f :
+                                  definition.Element == EquipmentElement.Lightning ? 1.03f : 1f;
+            float elementRadius = definition.Element == EquipmentElement.Ice ? 1.14f : 1f;
+            int elementTargets = definition.Element == EquipmentElement.Lightning ? 1 : 0;
+
+            HuntingAttackStyle style = (HuntingAttackStyle)Mathf.Clamp(definition.Variant, 0, 2);
+            switch (style)
+            {
+                case HuntingAttackStyle.Cleave:
+                    return new HuntingModeProfile
+                    {
+                        Style = style,
+                        StyleName = "부채꼴 다중 베기",
+                        MaxTargets = 2 + rarity + elementTargets,
+                        Radius = (100f + rarity * 16f) * elementRadius,
+                        DamageRatio = (0.28f + growthPower) * elementDamage,
+                        ChainFalloff = 1f
+                    };
+                case HuntingAttackStyle.AreaBurst:
+                    return new HuntingModeProfile
+                    {
+                        Style = style,
+                        StyleName = "원형 범위 폭발",
+                        MaxTargets = 3 + rarity + elementTargets,
+                        Radius = (132f + rarity * 22f) * elementRadius,
+                        DamageRatio = (0.24f + growthPower * 0.95f) * elementDamage,
+                        ChainFalloff = 1f
+                    };
+                default:
+                    return new HuntingModeProfile
+                    {
+                        Style = HuntingAttackStyle.Chain,
+                        StyleName = "연쇄 검격",
+                        MaxTargets = 2 + rarity + elementTargets,
+                        Radius = (190f + rarity * 26f) * elementRadius,
+                        DamageRatio = (0.26f + growthPower) * elementDamage,
+                        ChainFalloff = Mathf.Clamp01(0.80f + rarity * 0.025f)
+                    };
+            }
         }
+
+        public BossModeProfile GetBossModeProfile(int itemId)
+        {
+            itemId = CanonicalItemId(itemId);
+            if (!IsValidItem(itemId)) return DefaultBossProfile();
+            EquipmentDefinition definition = definitions[itemId];
+            int rarity = (int)definition.Rarity;
+            int level = GetLevel(itemId);
+            int ownedCopies = GetCopies(itemId);
+            float growthPower = rarity * 0.105f + Mathf.Max(0, level - 1) * 0.019f +
+                                Mathf.Min(0.14f, Mathf.Max(0, ownedCopies - 1) * 0.015f);
+            float elementDamage = definition.Element == EquipmentElement.Fire ? 1.08f :
+                                  definition.Element == EquipmentElement.Lightning ? 1.04f : 1f;
+            int lightningHit = definition.Element == EquipmentElement.Lightning ? 1 : 0;
+
+            BossAttackStyle style = (BossAttackStyle)Mathf.Clamp(definition.Variant, 0, 2);
+            switch (style)
+            {
+                case BossAttackStyle.FocusStrike:
+                    return new BossModeProfile
+                    {
+                        Style = style,
+                        StyleName = "집중 참격",
+                        HitCount = 1,
+                        TotalDamageRatio = (0.50f + growthPower) * elementDamage,
+                        ExecuteThreshold = 0f,
+                        ExecuteBonusRatio = 0f
+                    };
+                case BossAttackStyle.RapidPierce:
+                    return new BossModeProfile
+                    {
+                        Style = style,
+                        StyleName = "단일 연속 타격",
+                        HitCount = 2 + rarity + lightningHit,
+                        TotalDamageRatio = (0.46f + growthPower) * elementDamage,
+                        ExecuteThreshold = 0f,
+                        ExecuteBonusRatio = 0f
+                    };
+                default:
+                    return new BossModeProfile
+                    {
+                        Style = BossAttackStyle.Execution,
+                        StyleName = "처형 참격",
+                        HitCount = 1,
+                        TotalDamageRatio = (0.42f + growthPower) * elementDamage,
+                        ExecuteThreshold = 0.25f + rarity * 0.025f,
+                        ExecuteBonusRatio = (0.30f + rarity * 0.08f) * elementDamage
+                    };
+            }
+        }
+
+        public float GetItemDamageMultiplier(int itemId) => GetHuntingDamageMultiplier(itemId);
 
         public float GetHuntingDamageMultiplier(int itemId)
         {
-            itemId = CanonicalItemId(itemId);
-            if (!IsOwned(itemId) || !IsValidItem(itemId)) return 1f;
-            EquipmentDefinition definition = definitions[itemId];
-            float rarityBonus = (int)definition.Rarity * 0.08f;
-            float levelBonus = Mathf.Max(0, levels[itemId] - 1) * 0.015f;
-            float duplicateBonus = Mathf.Min(0.10f, Mathf.Max(0, copies[itemId] - 1) * 0.012f);
-            float variantBonus = definition.Variant * 0.010f;
-            return 1f + rarityBonus + levelBonus + duplicateBonus + variantBonus;
+            return 1f + GetHuntingModeProfile(itemId).DamageRatio;
         }
 
         public float GetBossDamageMultiplier(int itemId)
         {
-            itemId = CanonicalItemId(itemId);
-            if (!IsOwned(itemId) || !IsValidItem(itemId)) return 1f;
-            EquipmentDefinition definition = definitions[itemId];
-            float rarityBonus = (int)definition.Rarity * 0.11f;
-            float levelBonus = Mathf.Max(0, levels[itemId] - 1) * 0.020f;
-            float duplicateBonus = Mathf.Min(0.14f, Mathf.Max(0, copies[itemId] - 1) * 0.015f);
-            float variantBonus = definition.Variant * 0.015f;
-            return 1f + rarityBonus + levelBonus + duplicateBonus + variantBonus;
+            return 1f + GetBossModeProfile(itemId).TotalDamageRatio;
         }
 
         public string GetHuntingEffectDescription(int itemId)
         {
-            float bonus = Mathf.Max(0f, GetHuntingDamageMultiplier(itemId) - 1f) * 100f;
-            return $"사냥 효과 · 일반 몬스터 피해 +{bonus:0.#}%";
+            HuntingModeProfile profile = GetHuntingModeProfile(itemId);
+            return $"사냥 · {profile.StyleName} · 최대 {profile.MaxTargets}마리 · 공격력 {profile.DamageRatio * 100f:0}%";
         }
 
         public string GetBossEffectDescription(int itemId)
         {
-            float bonus = Mathf.Max(0f, GetBossDamageMultiplier(itemId) - 1f) * 100f;
-            return $"보스 효과 · 보스 피해 +{bonus:0.#}%";
+            BossModeProfile profile = GetBossModeProfile(itemId);
+            if (profile.Style == BossAttackStyle.RapidPierce)
+                return $"보스 · {profile.StyleName} · 단일 1명 {profile.HitCount}타 · 총 {profile.TotalDamageRatio * 100f:0}%";
+            if (profile.Style == BossAttackStyle.Execution)
+                return $"보스 · {profile.StyleName} · 단일 1명 · HP {profile.ExecuteThreshold * 100f:0}% 이하 추가 {profile.ExecuteBonusRatio * 100f:0}%";
+            return $"보스 · {profile.StyleName} · 단일 1명 · 공격력 {profile.TotalDamageRatio * 100f:0}%";
         }
 
         public float GetActiveDamageMultiplier(bool boss)
@@ -346,10 +461,7 @@ namespace PeanutWarrior.Prototype
             return boss ? GetBossDamageMultiplier(itemId) : GetHuntingDamageMultiplier(itemId);
         }
 
-        public string UseName(bool boss)
-        {
-            return boss ? "보스" : "사냥";
-        }
+        public string UseName(bool boss) => boss ? "보스" : "사냥";
 
         public string ElementName(int elementIndex)
         {
@@ -372,6 +484,32 @@ namespace PeanutWarrior.Prototype
                 3 => "유니크",
                 4 => "레전드",
                 _ => "등급"
+            };
+        }
+
+        private static HuntingModeProfile DefaultHuntingProfile()
+        {
+            return new HuntingModeProfile
+            {
+                Style = HuntingAttackStyle.Cleave,
+                StyleName = "부채꼴 다중 베기",
+                MaxTargets = 2,
+                Radius = 110f,
+                DamageRatio = 0.20f,
+                ChainFalloff = 1f
+            };
+        }
+
+        private static BossModeProfile DefaultBossProfile()
+        {
+            return new BossModeProfile
+            {
+                Style = BossAttackStyle.FocusStrike,
+                StyleName = "집중 참격",
+                HitCount = 1,
+                TotalDamageRatio = 0.35f,
+                ExecuteThreshold = 0f,
+                ExecuteBonusRatio = 0f
             };
         }
 
@@ -419,7 +557,7 @@ namespace PeanutWarrior.Prototype
             if (schemaVersion < CurrentSchemaVersion)
             {
                 schemaVersion = CurrentSchemaVersion;
-                lastMessage = "기존 사냥용·보스용 장비를 통합 장비 48개로 이전 완료";
+                lastMessage = "장비 효과를 사냥 범위형·보스 집중형 전투 모드로 변환 완료";
             }
         }
 
@@ -430,13 +568,9 @@ namespace PeanutWarrior.Prototype
             {
                 for (int rarity = 1; rarity <= RarityCount; rarity++)
                 {
-                    int legacyCopies = legacySwords.GetCopies(
-                        element, (SwordProgressionPrototype.SwordRarity)rarity);
+                    int legacyCopies = legacySwords.GetCopies(element, (SwordProgressionPrototype.SwordRarity)rarity);
                     for (int copy = 0; copy < legacyCopies; copy++)
-                    {
-                        int variant = copy % VariantsPerRarity;
-                        copies[GetUnifiedItemId(element, rarity, variant)]++;
-                    }
+                        copies[GetUnifiedItemId(element, rarity, copy % VariantsPerRarity)]++;
                 }
             }
             legacyMigrated = true;
@@ -444,8 +578,7 @@ namespace PeanutWarrior.Prototype
 
         private void EnsureStarterEquipment()
         {
-            if (FindFirstOwned(0) < 0)
-                copies[GetUnifiedItemId(0, 1, 0)] = 1;
+            if (FindFirstOwned(0) < 0) copies[GetUnifiedItemId(0, 1, 0)] = 1;
         }
 
         private void RepairEquippedItems()
@@ -454,7 +587,6 @@ namespace PeanutWarrior.Prototype
                 huntingItem = FindFirstOwned(ReadElement(huntingElementField));
             if (!IsValidItem(bossItem) || !IsOwned(bossItem))
                 bossItem = FindFirstOwned(ReadElement(bossElementField));
-
             ApplyEquippedElement(huntingItem, false);
             ApplyEquippedElement(bossItem, true);
         }
@@ -465,7 +597,6 @@ namespace PeanutWarrior.Prototype
             for (int rarity = RarityCount; rarity >= 1; rarity--)
                 foreach (int id in GetUnifiedItemIds(preferredElement, rarity))
                     if (IsOwned(id)) return id;
-
             for (int id = 0; id < ItemCount; id++)
                 if (IsOwned(id)) return id;
             return -1;
@@ -475,10 +606,9 @@ namespace PeanutWarrior.Prototype
         {
             itemId = CanonicalItemId(itemId);
             if (!IsValidItem(itemId)) return;
-            EquipmentDefinition definition = definitions[itemId];
             FieldInfo field = boss ? bossElementField : huntingElementField;
             if (field != null)
-                field.SetValue(arena, Enum.ToObject(field.FieldType, (int)definition.Element));
+                field.SetValue(arena, Enum.ToObject(field.FieldType, (int)definitions[itemId].Element));
         }
 
         private int ReadElement(FieldInfo field)
@@ -499,10 +629,7 @@ namespace PeanutWarrior.Prototype
             return false;
         }
 
-        private static bool IsValidItem(int itemId)
-        {
-            return itemId >= 0 && itemId < ItemCount;
-        }
+        private static bool IsValidItem(int itemId) => itemId >= 0 && itemId < ItemCount;
 
         private void Save()
         {
@@ -523,9 +650,6 @@ namespace PeanutWarrior.Prototype
             if (paused) Save();
         }
 
-        private void OnApplicationQuit()
-        {
-            Save();
-        }
+        private void OnApplicationQuit() => Save();
     }
 }

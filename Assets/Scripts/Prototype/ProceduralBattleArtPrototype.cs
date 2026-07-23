@@ -27,7 +27,6 @@ namespace PeanutWarrior.Prototype
         private readonly Sprite[] unitSprites = new Sprite[12];
         private readonly Sprite[] effectSprites = new Sprite[8];
         private readonly Sprite[] backgroundSprites = new Sprite[4];
-        private readonly List<Transform> companions = new List<Transform>();
         private readonly HashSet<int> cleanedRoots = new HashSet<int>();
 
         private RuntimeWorldViewPrototype worldView;
@@ -47,6 +46,8 @@ namespace PeanutWarrior.Prototype
         private bool artReady;
 
         public bool ArtReady => artReady;
+        public Sprite GetUnitSprite(int index) =>
+            index >= 0 && index < unitSprites.Length ? unitSprites[index] : null;
         public Sprite GetEffectSprite(int index) =>
             index >= 0 && index < effectSprites.Length ? effectSprites[index] : null;
 
@@ -202,8 +203,6 @@ namespace PeanutWarrior.Prototype
             if (!artReady || !ResolveWorld()) return;
             ApplyPlayer();
             ApplyEnemies();
-            EnsureCompanions();
-            AnimateCompanions();
             ApplyStageBackground();
         }
 
@@ -240,7 +239,6 @@ namespace PeanutWarrior.Prototype
                 worldRoot = resolvedRoot;
                 stageBackground = null;
                 playerRoot = null;
-                companions.Clear();
                 cleanedRoots.Clear();
                 currentTheme = -1;
                 lastAspect = -1f;
@@ -361,47 +359,6 @@ namespace PeanutWarrior.Prototype
             {
                 shadow.localPosition = new Vector3(0f, -0.56f, 0f);
                 shadow.localScale = boss ? new Vector3(2f, 1.25f, 1f) : new Vector3(1.2f, 0.8f, 1f);
-            }
-        }
-
-        private void EnsureCompanions()
-        {
-            if (worldRoot == null || playerRoot == null || companions.Count == 3) return;
-            for (int index = companions.Count; index < 3; index++)
-            {
-                GameObject companion = new GameObject($"Illustrated Support Peanut {index + 1}");
-                companion.transform.SetParent(worldRoot.transform, false);
-                SpriteRenderer renderer = companion.AddComponent<SpriteRenderer>();
-                renderer.sprite = unitSprites[index + 1];
-                renderer.color = Color.white;
-                renderer.sortingOrder = 8;
-                companion.transform.localScale = Vector3.one * 1.12f;
-                companions.Add(companion.transform);
-            }
-        }
-
-        private void AnimateCompanions()
-        {
-            if (playerRoot == null || companions.Count != 3) return;
-            Vector3[] offsets =
-            {
-                new Vector3(-1.2f, -0.72f, 0f),
-                new Vector3(0f, -1.18f, 0f),
-                new Vector3(1.2f, -0.72f, 0f)
-            };
-            for (int index = 0; index < companions.Count; index++)
-            {
-                Transform companion = companions[index];
-                if (companion == null) continue;
-                float phase = Time.time * 0.6f + index * 2.094f;
-                Vector3 target = playerRoot.position + offsets[index] +
-                    new Vector3(Mathf.Cos(phase) * 0.08f, Mathf.Sin(phase * 1.5f) * 0.07f, 0f);
-                companion.position = Vector3.Lerp(
-                    companion.position,
-                    target,
-                    1f - Mathf.Exp(-9f * Time.deltaTime));
-                companion.localScale = Vector3.one * 1.12f *
-                    (1f + Mathf.Sin(Time.time * 4f + index) * 0.02f);
             }
         }
 

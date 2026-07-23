@@ -32,7 +32,7 @@ namespace PeanutWarrior.Prototype
         };
 
         private static readonly float[] MpCosts = { 18f, 24f, 30f, 42f, 22f, 30f, 38f, 55f };
-        private static readonly float[] Cooldowns = { 6f, 9f, 12f, 18f, 10f, 13f, 17f, 24f };
+        private static readonly float[] BaseCooldownSeconds = { 6f, 9f, 12f, 18f, 10f, 13f, 17f, 24f };
         private static readonly int[] BaseHitCounts = { 6, 12, 7, 16, 6, 9, 8, 1 };
         private static readonly float[] BaseDamageMultipliers = { 2.8f, 4.6f, 5.4f, 8.8f, 3.6f, 7.2f, 6.8f, 14.5f };
 
@@ -120,7 +120,7 @@ namespace PeanutWarrior.Prototype
 
         public float GetSkillBaseCooldown(int index)
         {
-            return IsValidSkill(index) ? Cooldowns[index] : 0f;
+            return IsValidSkill(index) ? BaseCooldownSeconds[index] : 0f;
         }
 
         public int GetSkillHitCount(int index)

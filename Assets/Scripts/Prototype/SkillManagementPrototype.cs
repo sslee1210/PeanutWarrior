@@ -31,7 +31,7 @@ namespace PeanutWarrior.Prototype
             "알맹이에 담긴 황금 생명핵을 천상검으로 바꿉니다. 전장의 빛을 모아 단 한 번 내려쳐 하늘과 지면을 함께 가릅니다."
         };
 
-        private static readonly float[] MpCosts = { 18f, 24f, 30f, 42f, 22f, 30f, 38f, 55f };
+        private static readonly float[] MpCosts = { 20f, 25f, 30f, 42f, 22f, 30f, 38f, 55f };
         private static readonly float[] BaseCooldownSeconds = { 6f, 9f, 12f, 18f, 10f, 13f, 17f, 24f };
         private static readonly int[] BaseHitCounts = { 6, 12, 7, 16, 6, 9, 8, 1 };
         private static readonly float[] BaseDamageMultipliers = { 2.8f, 4.6f, 5.4f, 8.8f, 3.6f, 7.2f, 6.8f, 14.5f };

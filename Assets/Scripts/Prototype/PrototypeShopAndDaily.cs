@@ -13,6 +13,7 @@ namespace PeanutWarrior.Prototype
         private CombatPrototypeArena arena;
         private IdleSystemsPrototype idleSystems;
         private SwordProgressionPrototype swordProgression;
+        private ElementEquipmentCatalogPrototype equipmentCatalog;
         private FieldInfo goldField;
         private FieldInfo fragmentsField;
         private FieldInfo diamondsField;
@@ -45,6 +46,7 @@ namespace PeanutWarrior.Prototype
             arena = FindFirstObjectByType<CombatPrototypeArena>();
             idleSystems = FindFirstObjectByType<IdleSystemsPrototype>();
             swordProgression = FindFirstObjectByType<SwordProgressionPrototype>();
+            equipmentCatalog = FindFirstObjectByType<ElementEquipmentCatalogPrototype>();
             if (arena == null)
             {
                 enabled = false;
@@ -112,7 +114,7 @@ namespace PeanutWarrior.Prototype
         {
             if (!SpendDiamonds(5))
             {
-                shopMessage = "검 소환에 다이아 5개 필요";
+                shopMessage = "장비 소환에 다이아 5개 필요";
                 return;
             }
 
@@ -122,6 +124,7 @@ namespace PeanutWarrior.Prototype
             swordCopies[elementIndex]++;
             totalSwordSummons++;
             swordProgression?.RegisterSummon(elementIndex, rarity);
+            equipmentCatalog?.RegisterSummon(elementIndex, rarity);
 
             FieldInfo targetField = equipForBoss ? bossElementField : huntingElementField;
             if (targetField != null)
@@ -131,11 +134,11 @@ namespace PeanutWarrior.Prototype
             {
                 int level = Convert.ToInt32(basicAttackLevelField.GetValue(arena));
                 basicAttackLevelField.SetValue(arena, level + 1);
-                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 장비 도감으로 기본 공격 강화";
+                shopMessage = $"{ElementName(elementIndex)} {RarityName(rarity)} 장비 획득 · 장비 도감으로 기본 공격 강화";
             }
             else
             {
-                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · {(equipForBoss ? "보스" : "사냥")} 장착";
+                shopMessage = $"{ElementName(elementIndex)} {RarityName(rarity)} 장비 획득";
             }
             Save();
         }
@@ -189,7 +192,7 @@ namespace PeanutWarrior.Prototype
 
         private static string ElementName(int index)
         {
-            return index switch { 0 => "무속성", 1 => "화염", 2 => "냉기", 3 => "번개", _ => "검" };
+            return index switch { 0 => "무속성", 1 => "화염", 2 => "냉기", 3 => "번개", _ => "장비" };
         }
 
         private static string RarityName(int rarity)

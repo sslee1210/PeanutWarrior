@@ -59,14 +59,28 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
+        public void EquipmentMenu_UsesLeftCatalogAndRightFullDetail()
+        {
+            Assert.NotNull(typeof(PeanutEquipmentDetailMenuV7).GetProperty("UsesLeftCatalogAndRightDetail", PublicInstance));
+            Assert.NotNull(typeof(PeanutEquipmentDetailMenuV7).GetProperty("ShowsSelectedWeaponAppearance", PublicInstance));
+            Assert.NotNull(typeof(PeanutEquipmentDetailMenuV7).GetProperty("ShowsFullCombatDetails", PublicInstance));
+            Assert.NotNull(typeof(PeanutEquipmentDetailMenuV7).GetProperty("SelectedItemId", PublicInstance));
+            Assert.NotNull(typeof(PeanutEquipmentDetailMenuV7).GetMethod("BuildPage", PrivateInstance));
+            Assert.NotNull(typeof(PeanutEquipmentDetailMenuV7).GetMethod("BuildWeaponIdentity", PrivateInstance));
+            Assert.NotNull(typeof(PeanutEquipmentDetailMenuV7).GetMethod("BuildHuntingDetail", PrivateInstance));
+            Assert.NotNull(typeof(PeanutEquipmentDetailMenuV7).GetMethod("BuildBossDetail", PrivateInstance));
+            Assert.NotNull(typeof(PeanutEquipmentDetailMenuV7).GetMethod("CreateWeaponSprite", PrivateStatic));
+        }
+
+        [Test]
         public void MenuLayouts_HaveOneOwnerWithoutFlicker()
         {
             Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesSplitGrowthLayout", PublicInstance));
             Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesPerTierAdvancementButtons", PublicInstance));
-            Assert.NotNull(typeof(PeanutEquipmentAndShopMenuV5).GetProperty("UsesUnifiedDualEffectCards", PublicInstance));
             Assert.NotNull(typeof(BottomNavigationOrderV4).GetProperty("BottomMenuOrder", PublicInstance));
             Assert.NotNull(typeof(MenuLayoutCoordinatorV6).GetProperty("UsesSingleOwnerPerPage", PublicInstance));
             Assert.NotNull(typeof(MenuLayoutCoordinatorV6).GetProperty("CurrentOwner", PublicInstance));
+            Assert.NotNull(typeof(MenuLayoutCoordinatorV6).GetMethod("ResolveBuilder", PrivateInstance));
         }
 
         [Test]

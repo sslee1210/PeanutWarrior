@@ -13,6 +13,7 @@ namespace PeanutWarrior.Prototype
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
         private const BindingFlags PrivateStatic = BindingFlags.Static | BindingFlags.NonPublic;
         private const BindingFlags PublicStatic = BindingFlags.Static | BindingFlags.Public;
+        private const BindingFlags PublicInstance = BindingFlags.Instance | BindingFlags.Public;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -37,6 +38,7 @@ namespace PeanutWarrior.Prototype
             RequireSingle<PeanutMenuLayoutV4>(errors);
             RequireSingle<PeanutEquipmentAndShopMenuV5>(errors);
             RequireSingle<ElementEquipmentCatalogPrototype>(errors);
+            RequireSingle<LoadoutBonusCombatPrototype>(errors);
             RequireSingle<AdvancementProgressionPrototype>(errors);
             RequireSingle<PeanutSaveGameService>(errors);
 
@@ -50,7 +52,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · pets spread across targets, menus use one renderer, equipment entries show hunting/boss effects together, and skill details expose accurate combat values.");
+                    "PASS · hunting equipment performs multi-target area patterns, boss equipment focuses every extra hit on one boss, skill details use live combat values, and menus use one renderer.");
                 yield break;
             }
 
@@ -113,11 +115,11 @@ namespace PeanutWarrior.Prototype
             }
 
             Type skillType = typeof(SkillManagementPrototype);
-            if (skillType.GetMethod("GetSkillDescription", BindingFlags.Instance | BindingFlags.Public) == null)
+            if (skillType.GetMethod("GetSkillDescription", PublicInstance) == null)
                 errors.Add("Skill description API is missing.");
-            if (skillType.GetMethod("GetSkillTotalDamage", BindingFlags.Instance | BindingFlags.Public) == null)
+            if (skillType.GetMethod("GetSkillTotalDamage", PublicInstance) == null)
                 errors.Add("Skill damage detail API is missing.");
-            if (skillType.GetMethod("GetSkillCombatSummary", BindingFlags.Instance | BindingFlags.Public) == null)
+            if (skillType.GetMethod("GetSkillCombatSummary", PublicInstance) == null)
                 errors.Add("Skill combat summary API is missing.");
 
             BattleSkillDockV6 dock = FindFirstObjectByType<BattleSkillDockV6>();
@@ -158,8 +160,26 @@ namespace PeanutWarrior.Prototype
                 if (catalog.TotalItemCount != 48) errors.Add("Unified equipment catalog must contain 48 swords.");
                 if (!catalog.UsesUnifiedEquipmentEntries) errors.Add("Equipment entries must be unified.");
                 if (!catalog.ShowsDualBattleEffects) errors.Add("Each equipment entry must expose hunting and boss effects.");
+                if (!catalog.ChangesAttackPatternByBattleMode)
+                    errors.Add("Equipment must change its attack pattern between hunting and boss modes.");
                 if (catalog.UsesSeparateHuntingAndBossCatalogs)
                     errors.Add("Hunting and boss catalogs must not remain separate.");
+
+                int starter = catalog.GetUnifiedItemId(0, 1, 0);
+                ElementEquipmentCatalogPrototype.HuntingModeProfile hunting = catalog.GetHuntingModeProfile(starter);
+                ElementEquipmentCatalogPrototype.BossModeProfile boss = catalog.GetBossModeProfile(starter);
+                if (hunting.MaxTargets < 2) errors.Add("Hunting equipment must attack multiple enemies.");
+                if (hunting.Radius <= 0f) errors.Add("Hunting equipment must define an attack radius.");
+                if (boss.HitCount < 1) errors.Add("Boss equipment must define focused single-target hits.");
+            }
+
+            LoadoutBonusCombatPrototype combat = FindFirstObjectByType<LoadoutBonusCombatPrototype>();
+            if (combat != null)
+            {
+                if (!combat.UsesHuntingMultiTargetPatterns)
+                    errors.Add("Equipment combat must apply hunting multi-target patterns.");
+                if (!combat.UsesBossSingleTargetPatterns)
+                    errors.Add("Equipment combat must apply boss single-target patterns.");
             }
 
             PeanutEquipmentAndShopMenuV5 menu = FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();

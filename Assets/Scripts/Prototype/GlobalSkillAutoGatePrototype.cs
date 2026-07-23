@@ -10,7 +10,7 @@ namespace PeanutWarrior.Prototype
     /// <summary>
     /// Owns automatic skill scheduling. The arena's legacy one-skill priority loop is blocked,
     /// ready skills are queued by the exact moment their cooldown finishes, and every skill that
-    /// starts ready may overlap in the opening volley.
+    /// starts ready overlaps in the opening volley.
     /// </summary>
     [DefaultExecutionOrder(-1200)]
     public sealed class GlobalSkillAutoGatePrototype : MonoBehaviour
@@ -37,11 +37,13 @@ namespace PeanutWarrior.Prototype
         private long nextReadySequence;
         private int activeStart = -1;
         private bool openingVolleyUsed;
+        private bool openingVolleyPending;
 
         public bool UsesConfirmedMpCosts => true;
         public bool UsesCooldownCompletionOrder => true;
         public bool AllowsOpeningSkillOverlap => true;
         public bool UsesTacticalAutoPriority => false;
+        public bool OpeningVolleyPending => openingVolleyPending;
         public string HuntingAutoPriority => "쿨타임 완료 순서 · 동시 완료 시 동시 발동";
         public string BossAutoPriority => "쿨타임 완료 순서 · 동시 완료 시 동시 발동";
         public int WaitingSkillCount
@@ -100,6 +102,7 @@ namespace PeanutWarrior.Prototype
             {
                 activeStart = nextStart;
                 openingVolleyUsed = false;
+                openingVolleyPending = false;
                 for (int i = 0; i < waitingForCast.Length; i++)
                 {
                     waitingForCast[i] = false;
@@ -112,6 +115,7 @@ namespace PeanutWarrior.Prototype
 
             if (!skillManager.GlobalAutoEnabled)
             {
+                openingVolleyPending = false;
                 for (int index = activeStart; index < activeStart + 4; index++)
                 {
                     waitingForCast[index] = false;
@@ -121,9 +125,10 @@ namespace PeanutWarrior.Prototype
                 return;
             }
 
+            float readyThreshold = Mathf.Max(0.05f, Time.deltaTime + 0.01f);
             for (int index = activeStart; index < activeStart + 4; index++)
             {
-                if (!waitingForCast[index] && cooldowns[index] <= 0.05f)
+                if (!waitingForCast[index] && cooldowns[index] <= readyThreshold)
                 {
                     waitingForCast[index] = true;
                     readyThisFrame[index] = true;
@@ -132,6 +137,18 @@ namespace PeanutWarrior.Prototype
 
                 if (waitingForCast[index])
                     cooldowns[index] = Mathf.Max(cooldowns[index], 0.2f);
+            }
+
+            if (!openingVolleyUsed && !openingVolleyPending)
+            {
+                bool allWaiting = true;
+                bool allFresh = true;
+                for (int index = activeStart; index < activeStart + 4; index++)
+                {
+                    if (!waitingForCast[index]) allWaiting = false;
+                    if (!readyThisFrame[index]) allFresh = false;
+                }
+                openingVolleyPending = allWaiting && allFresh;
             }
         }
 
@@ -147,16 +164,14 @@ namespace PeanutWarrior.Prototype
 
             var queue = new List<int>(4);
             bool allFourWaiting = true;
-            bool allFourFresh = true;
             for (int index = activeStart; index < activeStart + 4; index++)
             {
                 if (waitingForCast[index]) queue.Add(index);
                 else allFourWaiting = false;
-                if (!readyThisFrame[index]) allFourFresh = false;
             }
 
             queue.Sort((left, right) => readySequence[left].CompareTo(readySequence[right]));
-            bool openingVolley = !openingVolleyUsed && allFourWaiting && allFourFresh;
+            bool openingVolley = !openingVolleyUsed && openingVolleyPending && allFourWaiting;
             float openingMp = ReadPlayerMp();
             float openingCost = 0f;
 
@@ -178,6 +193,7 @@ namespace PeanutWarrior.Prototype
             if (openingVolley)
             {
                 openingVolleyUsed = true;
+                openingVolleyPending = false;
                 playerMpField.SetValue(arena, Mathf.Max(0f, openingMp - openingCost));
             }
         }

@@ -7,7 +7,8 @@ namespace PeanutWarrior.Prototype
 {
     /// <summary>
     /// Stores the eight confirmed peanut sword arts and exposes their live combat values.
-    /// Skill level upgrades and the eight advancement tiers are separate, cumulative systems.
+    /// Skill-level upgrades and the eight advancement tiers are separate, cumulative systems.
+    /// Advancement changes damage, timing, hit structure, target counts and spectacle density.
     /// </summary>
     public sealed class SkillManagementPrototype : MonoBehaviour
     {
@@ -26,15 +27,18 @@ namespace PeanutWarrior.Prototype
             "하늘에 피어난 황금 땅콩꽃에서 추적 검비가 쏟아집니다. 땅에 박힌 검들이 연결된 뒤 한꺼번에 폭발합니다.",
             "황금 지맥이 적을 연결하고 거대한 꼬투리 칼날이 지면에서 연속 분출합니다. 마지막 대검이 적들을 띄워 마무리합니다.",
             "왕관 모양의 초대형 꼬투리 무기고를 열어 수십 자루의 왕실 검을 전개하고, 마지막에 하나의 거대검으로 합쳐 내려칩니다.",
-            "껍질을 여섯 개의 갑각검 날개로 해방합니다. 갑각검은 공격과 방어에 반응하고 마지막에 보스를 둘러싼 검진으로 붕괴합니다.",
-            "보스 주위를 여덟 방향으로 순간 이동하며 연속 참격을 남깁니다. 검을 거두는 순간 모든 검흔이 동시에 폭발합니다.",
+            "껍질을 여러 개의 갑각검 날개로 해방합니다. 갑각검은 공격과 방어에 반응하고 마지막에 보스를 둘러싼 검진으로 붕괴합니다.",
+            "보스 주위를 여러 방향으로 순간 이동하며 연속 참격을 남깁니다. 검을 거두는 순간 모든 검흔이 동시에 폭발합니다.",
             "보스 머리 위의 황금꽃과 발밑의 뿌리 검진이 피해를 저장합니다. 꽃과 뿌리가 동시에 닫히며 축적된 피해를 폭발시킵니다.",
-            "알맹이에 담긴 황금 생명핵을 천상검으로 바꿉니다. 전장의 빛을 모아 단 한 번 내려쳐 하늘과 지면을 함께 가릅니다."
+            "알맹이에 담긴 황금 생명핵을 천상검으로 바꿉니다. 전장의 빛을 모아 내려쳐 하늘과 지면을 함께 가릅니다."
         };
 
         private static readonly float[] BaseMpCosts = { 20f, 25f, 30f, 42f, 22f, 30f, 38f, 55f };
         private static readonly float[] BaseCooldownSeconds = { 6f, 9f, 12f, 18f, 10f, 13f, 17f, 24f };
         private static readonly int[] BaseHitCounts = { 6, 12, 7, 16, 6, 9, 8, 1 };
+        private static readonly int[] BaseTargetCounts = { 6, 8, 8, 12, 1, 1, 1, 1 };
+        private static readonly int[] BaseWaveCounts = { 1, 4, 2, 5, 1, 1, 2, 1 };
+        private static readonly int[] BaseVisualCounts = { 8, 20, 6, 24, 6, 8, 10, 12 };
         private static readonly float[] BaseDamageMultipliers = { 2.8f, 4.6f, 5.4f, 8.8f, 3.6f, 7.2f, 6.8f, 14.5f };
 
         private CombatPrototypeArena arena;
@@ -57,9 +61,14 @@ namespace PeanutWarrior.Prototype
         public bool UsesDistinctSkillTimings => true;
         public bool UsesSpectacularPeanutSwordArts => true;
         public bool UsesAdvancementSkillEvolution => true;
+        public bool EvolvesHitCounts => true;
+        public bool EvolvesTargetCounts => true;
+        public bool EvolvesVisualDensity => true;
+        public bool EvolvesSkillPatterns => true;
         public int CurrentAdvancementTier => advancementTierField == null || arena == null
             ? 0
             : Mathf.Clamp(Convert.ToInt32(advancementTierField.GetValue(arena)), 0, PeanutGameRules.AdvancementCount - 1);
+        public int CurrentEvolutionRank => Mathf.Clamp(CurrentAdvancementTier / 2 + 1, 1, 4);
         public string CurrentAdvancementName => PeanutGameRules.GetAdvancement(CurrentAdvancementTier).Name;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -135,10 +144,57 @@ namespace PeanutWarrior.Prototype
 
         public int GetSkillHitCount(int index)
         {
-            if (!IsValidSkill(index)) return 1;
+            return GetSkillHitCountForTier(index, CurrentAdvancementTier);
+        }
+
+        public int GetSkillTargetCount(int index)
+        {
+            return GetSkillTargetCountForTier(index, CurrentAdvancementTier);
+        }
+
+        public int GetSkillWaveCount(int index)
+        {
+            return GetSkillWaveCountForTier(index, CurrentAdvancementTier);
+        }
+
+        public int GetSkillVisualObjectCount(int index)
+        {
+            return GetSkillVisualObjectCountForTier(index, CurrentAdvancementTier);
+        }
+
+        public float GetSkillRangeMultiplier(int index)
+        {
+            if (!IsValidSkill(index)) return 1f;
+            return 1f + CurrentAdvancementTier * 0.12f;
+        }
+
+        public float GetSkillSpecialDuration(int index)
+        {
             int tier = CurrentAdvancementTier;
-            if (index == 5) return BaseHitCounts[index] + tier;
-            return BaseHitCounts[index];
+            return index switch
+            {
+                4 => 6f + tier * 0.75f,
+                6 => 3.2f + tier * 0.25f,
+                _ => 0f
+            };
+        }
+
+        public float GetSkillStoredDamageRatio(int index)
+        {
+            if (index != 6) return 0f;
+            return Mathf.Clamp(0.32f + CurrentAdvancementTier * 0.04f, 0.32f, 0.60f);
+        }
+
+        public string GetEvolutionGradeName()
+        {
+            return CurrentEvolutionRank switch
+            {
+                1 => "초식",
+                2 => "개화",
+                3 => "왕실",
+                4 => "차원",
+                _ => "초식"
+            };
         }
 
         public float GetSkillAdvancementDamageBonus(int index)
@@ -202,16 +258,37 @@ namespace PeanutWarrior.Prototype
         public string GetSkillAdvancementSummary(int index)
         {
             if (!IsValidSkill(index)) return "전직 강화 정보 없음";
-            return $"전직 {CurrentAdvancementTier}단계 · 피해 +{GetSkillAdvancementDamageBonus(index) * 100f:0}% · " +
-                   $"쿨타임 -{GetSkillAdvancementCooldownReduction(index) * 100f:0}% · " +
-                   $"MP -{GetSkillAdvancementMpReduction(index) * 100f:0}%";
+            return $"{GetEvolutionGradeName()} 진화 {CurrentEvolutionRank}단계 · 피해 +{GetSkillAdvancementDamageBonus(index) * 100f:0}% · " +
+                   $"쿨타임 -{GetSkillAdvancementCooldownReduction(index) * 100f:0}% · MP -{GetSkillAdvancementMpReduction(index) * 100f:0}%";
+        }
+
+        public string GetSkillEvolutionSummary(int index)
+        {
+            if (!IsValidSkill(index)) return "진화 정보 없음";
+            string targetText = IsBossSkill(index) ? "보스 1명" : $"최대 {GetSkillTargetCount(index)}명";
+            return $"{GetEvolutionGradeName()} 진화 · {GetSkillHitCount(index)}타 · {targetText} · " +
+                   $"{GetSkillWaveCount(index)}파동 · 연출 {GetSkillVisualObjectCount(index)}개 · 범위 ×{GetSkillRangeMultiplier(index):0.00}";
+        }
+
+        public string GetNextAdvancementEvolutionSummary(int index)
+        {
+            if (!IsValidSkill(index)) return "다음 진화 정보 없음";
+            int current = CurrentAdvancementTier;
+            if (current >= PeanutGameRules.AdvancementCount - 1) return "최종 전직 진화 완료";
+            int next = current + 1;
+            int hitGain = GetSkillHitCountForTier(index, next) - GetSkillHitCountForTier(index, current);
+            int targetGain = GetSkillTargetCountForTier(index, next) - GetSkillTargetCountForTier(index, current);
+            int waveGain = GetSkillWaveCountForTier(index, next) - GetSkillWaveCountForTier(index, current);
+            int visualGain = GetSkillVisualObjectCountForTier(index, next) - GetSkillVisualObjectCountForTier(index, current);
+            return $"다음 전직: 타격 +{hitGain} · 대상 +{targetGain} · 파동 +{waveGain} · 연출 +{visualGain}";
         }
 
         public string GetSkillCombatSummary(int index)
         {
-            return $"총 피해 {GetSkillTotalDamage(index):N0} · {GetSkillHitCount(index)}타\n" +
-                   $"타격당 {GetSkillDamagePerHit(index):N0} · 쿨타임 {GetSkillBaseCooldown(index):0.0}초 · MP {GetSkillMpCost(index):N0}\n" +
-                   GetSkillAdvancementSummary(index);
+            string targets = IsBossSkill(index) ? "보스 1명" : $"최대 {GetSkillTargetCount(index)}명";
+            return $"총 피해 {GetSkillTotalDamage(index):N0} · {GetSkillHitCount(index)}타 · {targets}\n" +
+                   $"쿨타임 {GetSkillBaseCooldown(index):0.0}초 · MP {GetSkillMpCost(index):N0} · 범위 ×{GetSkillRangeMultiplier(index):0.00}\n" +
+                   GetSkillAdvancementSummary(index) + "\n" + GetNextAdvancementEvolutionSummary(index);
         }
 
         public string GetSkillRole(int index)
@@ -223,9 +300,9 @@ namespace PeanutWarrior.Prototype
                 2 => "지맥 설치 · 공중 제어",
                 3 => "화면 전체 왕실 무기고 필살기",
                 4 => "갑각검 해방 · 공격과 방어 동시 강화",
-                5 => "보스 8방향 순간 연격",
+                5 => "보스 다방향 순간 연격",
                 6 => "피해 저장 · 상하 압축 폭발",
-                7 => "황금 생명핵 단일 초필살기",
+                7 => "황금 생명핵 다단 초필살기",
                 _ => "검술"
             };
         }
@@ -264,11 +341,11 @@ namespace PeanutWarrior.Prototype
             SetGlobalAuto(!globalAutoEnabled);
         }
 
-        public void SetGlobalAuto(bool enabled)
+        public void SetGlobalAuto(bool enabledValue)
         {
-            globalAutoEnabled = enabled;
-            for (int i = 0; i < autoEnabled.Length; i++) autoEnabled[i] = enabled;
-            message = enabled ? "모든 스킬 AUTO ON" : "모든 스킬 AUTO OFF";
+            globalAutoEnabled = enabledValue;
+            for (int i = 0; i < autoEnabled.Length; i++) autoEnabled[i] = enabledValue;
+            message = enabledValue ? "모든 스킬 AUTO ON" : "모든 스킬 AUTO OFF";
             Save();
         }
 
@@ -279,6 +356,76 @@ namespace PeanutWarrior.Prototype
             if (maxMpProperty != null && playerMpField != null)
                 playerMpField.SetValue(arena, Convert.ToSingle(maxMpProperty.GetValue(arena)));
             message = "MP와 전체 스킬 쿨타임 초기화";
+        }
+
+        private static int GetSkillHitCountForTier(int index, int tier)
+        {
+            if (!IsValidSkill(index)) return 1;
+            tier = Mathf.Clamp(tier, 0, PeanutGameRules.AdvancementCount - 1);
+            return index switch
+            {
+                0 => BaseHitCounts[index] + tier,
+                1 => BaseHitCounts[index] + tier * 3,
+                2 => BaseHitCounts[index] + tier,
+                3 => BaseHitCounts[index] + tier * 4,
+                4 => BaseHitCounts[index] + tier,
+                5 => BaseHitCounts[index] + tier * 2,
+                6 => BaseHitCounts[index] + tier * 2,
+                7 => BaseHitCounts[index] + (tier >= 3 ? 1 : 0) + (tier >= 6 ? 1 : 0),
+                _ => BaseHitCounts[index]
+            };
+        }
+
+        private static int GetSkillTargetCountForTier(int index, int tier)
+        {
+            if (!IsValidSkill(index)) return 1;
+            tier = Mathf.Clamp(tier, 0, PeanutGameRules.AdvancementCount - 1);
+            if (index >= 4) return 1;
+            return index switch
+            {
+                0 => BaseTargetCounts[index] + tier,
+                1 => BaseTargetCounts[index] + tier * 2,
+                2 => BaseTargetCounts[index] + tier * 2,
+                3 => BaseTargetCounts[index] + tier * 3,
+                _ => BaseTargetCounts[index]
+            };
+        }
+
+        private static int GetSkillWaveCountForTier(int index, int tier)
+        {
+            if (!IsValidSkill(index)) return 1;
+            tier = Mathf.Clamp(tier, 0, PeanutGameRules.AdvancementCount - 1);
+            return index switch
+            {
+                0 => BaseWaveCounts[index] + tier / 3,
+                1 => BaseWaveCounts[index] + tier,
+                2 => BaseWaveCounts[index] + tier / 2,
+                3 => BaseWaveCounts[index] + tier / 2,
+                4 => BaseWaveCounts[index] + tier / 3,
+                5 => BaseWaveCounts[index] + tier / 4,
+                6 => BaseWaveCounts[index] + tier / 2,
+                7 => BaseWaveCounts[index] + (tier >= 3 ? 1 : 0) + (tier >= 6 ? 1 : 0),
+                _ => BaseWaveCounts[index]
+            };
+        }
+
+        private static int GetSkillVisualObjectCountForTier(int index, int tier)
+        {
+            if (!IsValidSkill(index)) return 1;
+            tier = Mathf.Clamp(tier, 0, PeanutGameRules.AdvancementCount - 1);
+            int perTier = index switch
+            {
+                0 => 2,
+                1 => 6,
+                2 => 2,
+                3 => 8,
+                4 => 2,
+                5 => 2,
+                6 => 3,
+                7 => 4,
+                _ => 1
+            };
+            return BaseVisualCounts[index] + tier * perTier;
         }
 
         private static bool IsValidSkill(int index)

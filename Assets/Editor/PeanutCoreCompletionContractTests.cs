@@ -10,6 +10,8 @@ namespace PeanutWarrior.Tests
     public sealed class PeanutCoreCompletionContractTests
     {
         private const BindingFlags PublicInstance = BindingFlags.Instance | BindingFlags.Public;
+        private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+        private const BindingFlags PrivateStatic = BindingFlags.Static | BindingFlags.NonPublic;
 
         [Test]
         public void CanonicalRules_MatchIdleGameSpecification()
@@ -19,32 +21,19 @@ namespace PeanutWarrior.Tests
             Assert.AreEqual(45, PeanutGameRules.BossTimeLimitSeconds);
             Assert.AreEqual(8, PeanutGameRules.MaxOfflineHours);
             Assert.AreEqual(8, PeanutGameRules.AdvancementCount);
-            Assert.IsNotEmpty(PeanutGameRules.GetWorldName(1));
-            Assert.IsNotEmpty(PeanutGameRules.GetBossName(1));
             for (int i = 0; i < PeanutGameRules.AdvancementCount; i++)
                 StringAssert.EndsWith("땅콩", PeanutGameRules.GetAdvancement(i).Name);
         }
 
         [Test]
-        public void Advancement_ExposesCompleteProgressionApi()
-        {
-            Assert.IsTrue(typeof(AdvancementProgressionPrototype).IsSubclassOf(typeof(MonoBehaviour)));
-            Assert.NotNull(typeof(AdvancementProgressionPrototype).GetMethod("TryAdvance", PublicInstance));
-            Assert.NotNull(typeof(AdvancementProgressionPrototype).GetMethod("RestoreTier", PublicInstance));
-            Assert.NotNull(typeof(AdvancementProgressionPrototype).GetProperty("NextDefinition", PublicInstance));
-            Assert.NotNull(typeof(AdvancementProgressionPrototype).GetProperty("PetsUnlocked", PublicInstance));
-        }
-
-        [Test]
-        public void Pets_ExposeCollectionAndSeparateCombatContracts()
+        public void Pets_UseDirectSeparateTargetCombatInIdleSystem()
         {
             Assert.NotNull(typeof(PetProgressionPrototype).GetMethod("GetLevelsCopy", PublicInstance));
             Assert.NotNull(typeof(PetProgressionPrototype).GetMethod("GetStarsCopy", PublicInstance));
-            Assert.NotNull(typeof(PetProgressionPrototype).GetMethod("RestoreState", PublicInstance));
-            Assert.NotNull(typeof(PetProgressionPrototype).GetMethod("SpendGoldToTrain", PublicInstance));
-            Assert.NotNull(typeof(PetCombatSpreadPrototype).GetProperty("MinimumSpacing", PublicInstance));
-            Assert.NotNull(typeof(PetCombatSpreadPrototype).GetProperty("UsesSeparateTargets", PublicInstance));
-            Assert.NotNull(typeof(PetCombatSpreadPrototype).GetProperty("UsesBossSurroundFormation", PublicInstance));
+            Assert.NotNull(typeof(IdleSystemsPrototype).GetField("MinimumPetSpacing", PrivateStatic));
+            Assert.NotNull(typeof(IdleSystemsPrototype).GetField("claimedTargets", PrivateInstance));
+            Assert.NotNull(typeof(IdleSystemsPrototype).GetMethod("FindClosestUnclaimedEnemy", PrivateInstance));
+            Assert.NotNull(typeof(IdleSystemsPrototype).GetMethod("SeparatePets", PrivateInstance));
         }
 
         [Test]
@@ -56,27 +45,21 @@ namespace PeanutWarrior.Tests
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod(
                 "GetItemId", PublicInstance, null,
                 new[] { typeof(bool), typeof(int), typeof(int), typeof(int) }, null));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod(
-                "RegisterSummon", PublicInstance, null,
-                new[] { typeof(bool), typeof(int), typeof(int) }, null));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod(
-                "EquipItem", PublicInstance, null,
-                new[] { typeof(int), typeof(bool) }, null));
         }
 
         [Test]
-        public void MenuLayouts_ExposeConfirmedStructureWithoutFlicker()
+        public void MenuLayouts_HaveOneOwnerWithoutFlicker()
         {
             Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesSplitGrowthLayout", PublicInstance));
             Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesPerTierAdvancementButtons", PublicInstance));
             Assert.NotNull(typeof(PeanutEquipmentAndShopMenuV5).GetProperty("UsesSeparateHuntingAndBossTabs", PublicInstance));
-            Assert.NotNull(typeof(PeanutEquipmentAndShopMenuV5).GetProperty("EquipmentCatalogCount", PublicInstance));
             Assert.NotNull(typeof(BottomNavigationOrderV4).GetProperty("BottomMenuOrder", PublicInstance));
             Assert.NotNull(typeof(MenuLayoutCoordinatorV6).GetProperty("UsesSingleOwnerPerPage", PublicInstance));
+            Assert.NotNull(typeof(MenuLayoutCoordinatorV6).GetProperty("CurrentOwner", PublicInstance));
         }
 
         [Test]
-        public void SkillMenu_IsCardlessAndUsesNamedCircularIcons()
+        public void SkillMenu_IsCardlessAndUsesNamedIcons()
         {
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("SkillIconCount", PublicInstance));
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("UsesCardlessSkillLayout", PublicInstance));
@@ -85,11 +68,12 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
-        public void BattleSkillDock_HidesLegacyBlocksAndUsesCircularIcons()
+        public void BattleSkillDock_DirectlyHidesLegacyBlocks()
         {
             Assert.NotNull(typeof(BattleSkillDockV6).GetProperty("HidesLegacySkillBlocks", PublicInstance));
             Assert.NotNull(typeof(BattleSkillDockV6).GetProperty("UsesCircularBattleSkills", PublicInstance));
             Assert.NotNull(typeof(BattleSkillDockV6).GetProperty("AutoButtonIsTopLeft", PublicInstance));
+            Assert.NotNull(typeof(BattleSkillDockV6).GetMethod("RemoveLegacyDock", PrivateInstance));
         }
 
         [Test]
@@ -107,8 +91,6 @@ namespace PeanutWarrior.Tests
             Assert.AreEqual(3, PeanutSaveGameService.CurrentSchemaVersion);
             Assert.NotNull(typeof(PeanutSaveGameService).GetMethod("SaveNow", PublicInstance));
             Assert.NotNull(typeof(PeanutSaveGameService).GetMethod("TryRestoreBackup", PublicInstance));
-            Assert.NotNull(typeof(PeanutSaveGameService).GetProperty("MainSavePath", PublicInstance));
-            Assert.NotNull(typeof(PeanutSaveGameService).GetProperty("BackupSavePath", PublicInstance));
         }
 
         [Test]

@@ -13,6 +13,7 @@ namespace PeanutWarrior.Prototype
 
         public bool SynchronizesMenuAndBattleIcons => true;
         public bool SynchronizesSkillColors => true;
+        public bool WaitsForBuilderAssetInitialization => true;
         public int SynchronizedIconCount { get; private set; }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -26,17 +27,24 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            for (int frame = 0; frame < 45; frame++)
+            FieldInfo menuFontField = typeof(PeanutSkillMenuV6).GetField("font", PrivateInstance);
+            FieldInfo dockRoundedSpriteField = typeof(BattleSkillDockV6).GetField("roundedSprite", PrivateInstance);
+
+            for (int frame = 0; frame < 75; frame++)
             {
                 PeanutSkillMenuV6 menu = FindFirstObjectByType<PeanutSkillMenuV6>();
                 BattleSkillDockV6 dock = FindFirstObjectByType<BattleSkillDockV6>();
-                if (menu != null && dock != null)
+                bool menuReady = menu != null && menuFontField?.GetValue(menu) != null;
+                bool dockReady = dock != null && dockRoundedSpriteField?.GetValue(dock) != null;
+                if (menuReady && dockReady)
                 {
                     Apply(menu, dock);
                     yield break;
                 }
                 yield return null;
             }
+
+            Debug.LogError("[PeanutWarrior] 새 스킬 문양 동기화 초기화 실패");
             enabled = false;
         }
 

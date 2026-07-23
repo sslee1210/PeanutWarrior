@@ -19,10 +19,10 @@ namespace PeanutWarrior.Tests
             Assert.AreEqual(45, PeanutGameRules.BossTimeLimitSeconds);
             Assert.AreEqual(8, PeanutGameRules.MaxOfflineHours);
             Assert.AreEqual(8, PeanutGameRules.AdvancementCount);
-            for (int i = 0; i < PeanutGameRules.AdvancementCount; i++)
-                StringAssert.EndsWith("땅콩", PeanutGameRules.GetAdvancement(i).Name);
             Assert.IsNotEmpty(PeanutGameRules.GetWorldName(1));
             Assert.IsNotEmpty(PeanutGameRules.GetBossName(1));
+            for (int i = 0; i < PeanutGameRules.AdvancementCount; i++)
+                StringAssert.EndsWith("땅콩", PeanutGameRules.GetAdvancement(i).Name);
         }
 
         [Test]
@@ -45,6 +45,43 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
+        public void Equipment_SeparatesHuntingAndBossCatalogs()
+        {
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("TotalItemCount", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("ItemCountPerUse", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("UsesSeparateHuntingAndBossCatalogs", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod(
+                "GetItemId", PublicInstance, null,
+                new[] { typeof(bool), typeof(int), typeof(int), typeof(int) }, null));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod(
+                "RegisterSummon", PublicInstance, null,
+                new[] { typeof(bool), typeof(int), typeof(int) }, null));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod(
+                "EquipItem", PublicInstance, null,
+                new[] { typeof(int), typeof(bool) }, null));
+        }
+
+        [Test]
+        public void MenuLayouts_ExposeConfirmedStructure()
+        {
+            Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesCircularSkillLayout", PublicInstance));
+            Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesSplitGrowthLayout", PublicInstance));
+            Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesPerTierAdvancementButtons", PublicInstance));
+            Assert.NotNull(typeof(PeanutEquipmentAndShopMenuV5).GetProperty("UsesSeparateHuntingAndBossTabs", PublicInstance));
+            Assert.NotNull(typeof(PeanutEquipmentAndShopMenuV5).GetProperty("EquipmentCatalogCount", PublicInstance));
+            Assert.NotNull(typeof(BottomNavigationOrderV4).GetProperty("BottomMenuOrder", PublicInstance));
+        }
+
+        [Test]
+        public void Shop_ExposesPurposeSpecificSwordSummons()
+        {
+            Assert.NotNull(typeof(PrototypeShopAndDaily).GetMethod(
+                "TrySummonSword", PublicInstance, null, new[] { typeof(bool) }, null));
+            Assert.NotNull(typeof(PrototypeShopAndDaily).GetProperty("HuntingSwordSummons", PublicInstance));
+            Assert.NotNull(typeof(PrototypeShopAndDaily).GetProperty("BossSwordSummons", PublicInstance));
+        }
+
+        [Test]
         public void SaveService_UsesVersionedJsonAndBackupRecovery()
         {
             Assert.AreEqual(3, PeanutSaveGameService.CurrentSchemaVersion);
@@ -61,35 +98,6 @@ namespace PeanutWarrior.Tests
             Assert.NotNull(typeof(GameSettingsPrototype).GetMethod("SetSfxVolume", PublicInstance));
             Assert.NotNull(typeof(GameSettingsPrototype).GetMethod("SetVibration", PublicInstance));
             Assert.NotNull(typeof(GameSettingsPrototype).GetMethod("SetFrameRate", PublicInstance));
-        }
-
-        [Test]
-        public void MenuV4_UsesRequestedInformationArchitecture()
-        {
-            Assert.IsTrue(typeof(PeanutMenuLayoutV4).IsSubclassOf(typeof(MonoBehaviour)));
-            Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("BottomMenuOrder", PublicInstance));
-            Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesCircularSkillLayout", PublicInstance));
-            Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesElementEquipmentTabs", PublicInstance));
-            Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesSplitGrowthLayout", PublicInstance));
-            Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesPerTierAdvancementButtons", PublicInstance));
-        }
-
-        [Test]
-        public void EquipmentCatalog_HasFourElementsFourGradesAndThreeVariants()
-        {
-            Assert.IsTrue(typeof(ElementEquipmentCatalogPrototype).IsSubclassOf(typeof(MonoBehaviour)));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetItemId", PublicInstance));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("RegisterSummon", PublicInstance));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("UpgradeItem", PublicInstance));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("EquipItem", PublicInstance));
-            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetActiveDamageMultiplier", PublicInstance));
-        }
-
-        [Test]
-        public void Growth_AllowsEquipmentMaterialSpending()
-        {
-            Assert.NotNull(typeof(GrowthExpansionPrototype).GetMethod("TrySpendEquipmentMaterials", PublicInstance));
-            Assert.NotNull(typeof(GrowthExpansionPrototype).GetMethod("AddEquipmentMaterials", PublicInstance));
         }
     }
 }

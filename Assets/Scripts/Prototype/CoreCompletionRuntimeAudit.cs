@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace PeanutWarrior.Prototype
 {
-    [DefaultExecutionOrder(32500)]
+    [DefaultExecutionOrder(34000)]
     public sealed class CoreCompletionRuntimeAudit : MonoBehaviour
     {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -20,7 +20,7 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            for (int i = 0; i < 18; i++) yield return null;
+            for (int i = 0; i < 22; i++) yield return null;
 
             var errors = new List<string>();
             RequireSingle<AdvancementProgressionPrototype>(errors);
@@ -32,6 +32,7 @@ namespace PeanutWarrior.Prototype
             RequireSingle<CoreShopProgressionPrototype>(errors);
             RequireSingle<PeanutCoreMenuCompletionV3>(errors);
             RequireSingle<PeanutMenuLayoutV4>(errors);
+            RequireSingle<PeanutEquipmentAndShopMenuV5>(errors);
             RequireSingle<BottomNavigationOrderV4>(errors);
             RequireSingle<ElementEquipmentCatalogPrototype>(errors);
             RequireSingle<AdvancementWorldViewPrototype>(errors);
@@ -79,10 +80,22 @@ namespace PeanutWarrior.Prototype
             ElementEquipmentCatalogPrototype catalog = FindFirstObjectByType<ElementEquipmentCatalogPrototype>();
             if (catalog != null)
             {
-                if (catalog.TotalItemCount != 48)
-                    errors.Add("Element equipment catalog must contain 48 items.");
+                if (catalog.TotalItemCount != 96)
+                    errors.Add("Separated equipment catalogs must contain 96 items in total.");
+                if (catalog.ItemCountPerUse != 48)
+                    errors.Add("Hunting and boss catalogs must each contain 48 items.");
                 if (catalog.VariantsPerGrade != 3)
-                    errors.Add("Each element and rarity must contain three equipment variants.");
+                    errors.Add("Each use, element and rarity must contain three equipment variants.");
+                if (!catalog.UsesSeparateHuntingAndBossCatalogs)
+                    errors.Add("Hunting and boss equipment catalogs must be separate.");
+
+                for (int element = 0; element < 4; element++)
+                {
+                    int huntingId = catalog.GetItemId(false, element, 1, 0);
+                    int bossId = catalog.GetItemId(true, element, 1, 0);
+                    if (huntingId < 0 || bossId < 0 || huntingId == bossId)
+                        errors.Add("Hunting and boss element item IDs must be distinct.");
+                }
             }
 
             GameSettingsPrototype settings = FindFirstObjectByType<GameSettingsPrototype>();
@@ -106,14 +119,29 @@ namespace PeanutWarrior.Prototype
             PeanutMenuLayoutV4 menuV4 = FindFirstObjectByType<PeanutMenuLayoutV4>();
             if (menuV4 != null)
             {
-                if (menuV4.LayoutVersion != 4) errors.Add("Menu layout version must be 4.");
+                if (menuV4.LayoutVersion != 4) errors.Add("Core menu layout version must be 4.");
                 if (menuV4.BottomMenuOrder != "성장 → 장비 → 스킬 → 펫 → 전직 → 상점")
                     errors.Add("Bottom navigation order is incorrect.");
                 if (!menuV4.UsesCircularSkillLayout) errors.Add("Skill page must use circular skill buttons.");
-                if (!menuV4.UsesElementEquipmentTabs) errors.Add("Equipment page must use elemental tabs.");
                 if (!menuV4.UsesSplitGrowthLayout) errors.Add("Growth page must split profile and upgrades.");
                 if (!menuV4.UsesPerTierAdvancementButtons) errors.Add("Advancement rows need individual buttons.");
             }
+
+            PeanutEquipmentAndShopMenuV5 menuV5 = FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();
+            if (menuV5 != null)
+            {
+                if (!menuV5.UsesSeparateHuntingAndBossTabs)
+                    errors.Add("Equipment page needs separate hunting and boss tabs.");
+                if (menuV5.EquipmentCatalogCount != 2 || menuV5.ElementsPerCatalog != 4)
+                    errors.Add("Equipment page must expose two catalogs with four elements each.");
+                if (menuV5.ItemsPerCatalog != 48)
+                    errors.Add("Each equipment use catalog must expose 48 items.");
+            }
+
+            MethodInfo summonByUse = typeof(PrototypeShopAndDaily).GetMethod(
+                "TrySummonSword", BindingFlags.Instance | BindingFlags.Public);
+            if (summonByUse == null)
+                errors.Add("Shop must expose separate hunting and boss sword summons.");
 
             AdvancementWorldViewPrototype advancementView = FindFirstObjectByType<AdvancementWorldViewPrototype>();
             if (advancementView != null && advancement != null && advancementView.AppliedTier != advancement.Tier)
@@ -134,7 +162,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · menu V4, reordered navigation, circular split skill page, elemental 48-item equipment catalog, split growth page and per-tier advancement list are active.");
+                    "PASS · navigation order, split growth, circular hunting/boss skills, per-tier advancement, separate 48-item hunting and 48-item boss sword catalogs, equipment V5 and separate summons are active.");
                 yield break;
             }
 

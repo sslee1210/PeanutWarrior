@@ -47,14 +47,14 @@ namespace PeanutWarrior.Core
 
         private static readonly AdvancementDefinition[] AdvancementDefinitions =
         {
-            new AdvancementDefinition("새싹 껍질", 1, 0, 0L, 0, 1.00f, 1, false),
-            new AdvancementDefinition("전투 껍질", 2, 180, 150L, 5, 1.35f, 2, false),
-            new AdvancementDefinition("황금 수호 껍질", 4, 420, 500L, 15, 1.70f, 3, true),
-            new AdvancementDefinition("화염 갑각", 15, 1200, 5000L, 25, 2.05f, 4, true),
-            new AdvancementDefinition("빙결 갑각", 30, 3000, 20000L, 40, 2.40f, 5, true),
-            new AdvancementDefinition("뇌광 갑각", 60, 8000, 100000L, 60, 2.75f, 6, true),
-            new AdvancementDefinition("왕실 땅콩 갑주", 120, 20000, 500000L, 90, 3.10f, 7, true),
-            new AdvancementDefinition("차원 수호자", 240, 50000, 2500000L, 130, 3.45f, 8, true)
+            new AdvancementDefinition("새싹 땅콩", 1, 0, 0L, 0, 1.00f, 1, false),
+            new AdvancementDefinition("전투 땅콩", 2, 180, 150L, 5, 1.35f, 2, false),
+            new AdvancementDefinition("황금 수호 땅콩", 4, 420, 500L, 15, 1.70f, 3, true),
+            new AdvancementDefinition("화염 갑각 땅콩", 15, 1200, 5000L, 25, 2.05f, 4, true),
+            new AdvancementDefinition("빙결 갑각 땅콩", 30, 3000, 20000L, 40, 2.40f, 5, true),
+            new AdvancementDefinition("뇌광 갑각 땅콩", 60, 8000, 100000L, 60, 2.75f, 6, true),
+            new AdvancementDefinition("왕실 갑주 땅콩", 120, 20000, 500000L, 90, 3.10f, 7, true),
+            new AdvancementDefinition("차원 수호 땅콩", 240, 50000, 2500000L, 130, 3.45f, 8, true)
         };
 
         private static readonly string[] WorldNames =

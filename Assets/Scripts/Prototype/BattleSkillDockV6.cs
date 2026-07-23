@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 namespace PeanutWarrior.Prototype
 {
-    [DefaultExecutionOrder(34100)]
+    [DefaultExecutionOrder(36000)]
     public sealed class BattleSkillDockV6 : MonoBehaviour
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -51,30 +51,27 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            for (int i = 0; i < 18; i++)
+            for (int i = 0; i < 24; i++)
             {
-                yield return null;
                 sourceUi = FindFirstObjectByType<PeanutMobileCanvasPrototype>();
                 skills = FindFirstObjectByType<SkillManagementPrototype>();
                 stageFlow = FindFirstObjectByType<StageFlowController>();
-                if (sourceUi != null && skills != null && stageFlow != null) break;
+                if (sourceUi != null && skills != null && stageFlow != null)
+                {
+                    BindSourceUi();
+                    if (mainPage != null) break;
+                }
+                yield return null;
             }
 
-            if (sourceUi == null || skills == null || stageFlow == null)
-            {
-                enabled = false;
-                yield break;
-            }
-
-            BindSourceUi();
-            if (mainPage == null)
+            if (sourceUi == null || skills == null || stageFlow == null || mainPage == null)
             {
                 enabled = false;
                 yield break;
             }
 
             CreateAssets();
-            HideLegacyDock();
+            RemoveLegacyDock();
             BuildDock();
             Refresh();
         }
@@ -103,26 +100,40 @@ namespace PeanutWarrior.Prototype
             for (int i = 0; i < icons.Length; i++) icons[i] = SkillIconFactoryV6.Create(i);
         }
 
-        private void HideLegacyDock()
+        private void RemoveLegacyDock()
         {
+            if (mainPage == null) return;
+
+            Transform namedDock = mainPage.transform.Find("Active Skills");
+            if (namedDock != null && namedDock.gameObject != root)
+                namedDock.gameObject.SetActive(false);
+
             Text[] oldSkillTexts = skillTextsField?.GetValue(sourceUi) as Text[];
-            if (oldSkillTexts != null && oldSkillTexts.Length > 0 && oldSkillTexts[0] != null)
+            if (oldSkillTexts != null)
             {
-                Transform slot = oldSkillTexts[0].transform.parent;
-                Transform dock = slot == null ? null : slot.parent;
-                if (dock != null) dock.gameObject.SetActive(false);
+                for (int i = 0; i < oldSkillTexts.Length; i++)
+                {
+                    Text oldText = oldSkillTexts[i];
+                    if (oldText == null) continue;
+                    Transform slot = oldText.transform.parent;
+                    Transform dock = slot == null ? null : slot.parent;
+                    if (dock != null && dock.gameObject != root) dock.gameObject.SetActive(false);
+                }
             }
 
             Text oldAuto = globalAutoTextField?.GetValue(sourceUi) as Text;
-            if (oldAuto != null && oldAuto.transform.parent != null)
+            if (oldAuto != null && oldAuto.transform.parent != null && oldAuto.transform.parent.gameObject != root)
                 oldAuto.transform.parent.gameObject.SetActive(false);
         }
 
         private void BuildDock()
         {
-            root = Rect(mainPage.transform, "Battle Skill Dock V6", 748f, 592f, 624f, 144f).gameObject;
+            Transform existing = mainPage.transform.Find("Battle Skill Dock V6");
+            if (existing != null) Destroy(existing.gameObject);
 
-            RectTransform autoRect = Rect(root.transform, "AUTO", 0f, 0f, 92f, 32f);
+            root = Rect(mainPage.transform, "Battle Skill Dock V6", 730f, 586f, 642f, 150f).gameObject;
+
+            RectTransform autoRect = Rect(root.transform, "AUTO", 0f, 0f, 88f, 30f);
             autoImage = autoRect.gameObject.AddComponent<Image>();
             autoImage.sprite = roundedSprite;
             autoImage.type = Image.Type.Sliced;
@@ -131,20 +142,20 @@ namespace PeanutWarrior.Prototype
             autoButton.targetGraphic = autoImage;
             autoButton.navigation = new Navigation { mode = Navigation.Mode.None };
             autoButton.onClick.AddListener(ToggleAuto);
-            autoText = Label(autoRect, string.Empty, 2f, 1f, 88f, 30f, 12, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
+            autoText = Label(autoRect, string.Empty, 2f, 1f, 84f, 28f, 11, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             for (int i = 0; i < 4; i++)
             {
-                int slotIndex = i;
-                float x = 104f + i * 128f;
-                GameObject iconObject = new GameObject("Battle Skill " + i, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+                float x = 102f + i * 132f;
+                GameObject iconObject = new GameObject("Battle Skill " + i,
+                    typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
                 RectTransform rect = iconObject.GetComponent<RectTransform>();
                 rect.SetParent(root.transform, false);
                 rect.anchorMin = new Vector2(0f, 1f);
                 rect.anchorMax = new Vector2(0f, 1f);
                 rect.pivot = new Vector2(0f, 1f);
-                rect.anchoredPosition = new Vector2(x, -4f);
-                rect.sizeDelta = new Vector2(92f, 92f);
+                rect.anchoredPosition = new Vector2(x, -2f);
+                rect.sizeDelta = new Vector2(96f, 96f);
 
                 Image image = iconObject.GetComponent<Image>();
                 image.preserveAspect = true;
@@ -155,23 +166,50 @@ namespace PeanutWarrior.Prototype
                 button.navigation = new Navigation { mode = Navigation.Mode.None };
                 button.onClick.AddListener(OpenSkillPage);
 
-                stateTexts[i] = Label(iconObject.transform, string.Empty, 4f, 30f, 84f, 30f, 13, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
-                nameTexts[i] = Label(root.transform, string.Empty, x - 18f, 96f, 128f, 38f, 12, dark, TextAnchor.MiddleCenter, FontStyle.Bold);
+                stateTexts[i] = Label(iconObject.transform, string.Empty, 5f, 32f, 86f, 30f, 13,
+                    Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
+                nameTexts[i] = Label(root.transform, string.Empty, x - 22f, 98f, 140f, 42f, 12,
+                    dark, TextAnchor.MiddleCenter, FontStyle.Bold);
             }
+
+            root.transform.SetAsLastSibling();
         }
 
         private void Update()
         {
-            if (root == null || skills == null || stageFlow == null) return;
+            if (sourceUi == null || skills == null || stageFlow == null) return;
+            if (mainPage == null)
+            {
+                BindSourceUi();
+                return;
+            }
+
+            RemoveLegacyDock();
+            if (root == null)
+            {
+                BuildDock();
+            }
+            else
+            {
+                if (!root.activeSelf) root.SetActive(true);
+                root.transform.SetAsLastSibling();
+            }
+
             refreshTimer -= Time.unscaledDeltaTime;
             if (refreshTimer > 0f) return;
             refreshTimer = 0.10f;
             Refresh();
         }
 
+        private void LateUpdate()
+        {
+            RemoveLegacyDock();
+            if (root != null) root.transform.SetAsLastSibling();
+        }
+
         private void Refresh()
         {
-            if (root == null) return;
+            if (root == null || autoText == null || autoImage == null) return;
             bool auto = skills.GlobalAutoEnabled;
             autoText.text = auto ? "AUTO ON" : "AUTO OFF";
             autoImage.color = auto ? green : muted;
@@ -203,7 +241,8 @@ namespace PeanutWarrior.Prototype
                 showPageMethod.Invoke(sourceUi, new[] { skillsPageValue });
         }
 
-        private Text Label(Transform parent, string value, float x, float y, float width, float height, int size, Color color, TextAnchor anchor, FontStyle style)
+        private Text Label(Transform parent, string value, float x, float y, float width, float height,
+            int size, Color color, TextAnchor anchor, FontStyle style)
         {
             RectTransform rect = Rect(parent, "Text", x, y, width, height);
             Text text = rect.gameObject.AddComponent<Text>();

@@ -37,6 +37,7 @@ namespace PeanutWarrior.Prototype
             RequireSingle<MenuLayoutCoordinatorV6>(errors);
             RequireSingle<PeanutMenuLayoutV4>(errors);
             RequireSingle<PeanutEquipmentAndShopMenuV5>(errors);
+            RequireSingle<PeanutEquipmentDetailMenuV7>(errors);
             RequireSingle<ElementEquipmentCatalogPrototype>(errors);
             RequireSingle<LoadoutBonusCombatPrototype>(errors);
             RequireSingle<AdvancementProgressionPrototype>(errors);
@@ -52,7 +53,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · hunting equipment performs multi-target patterns, boss equipment focuses on one boss, and execution uses an extremely rare instant-kill roll capped at 0.001%.");
+                    "PASS · equipment uses a left catalog and right detailed weapon view, hunting and boss effects show full combat values, and execution remains capped at 0.001%.");
                 yield break;
             }
 
@@ -196,13 +197,15 @@ namespace PeanutWarrior.Prototype
                     errors.Add("Execution success must remove the boss's remaining HP.");
             }
 
-            PeanutEquipmentAndShopMenuV5 menu = FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();
-            if (menu != null)
+            PeanutEquipmentDetailMenuV7 detailMenu = FindFirstObjectByType<PeanutEquipmentDetailMenuV7>();
+            if (detailMenu != null)
             {
-                if (menu.UsesSeparateHuntingAndBossTabs)
-                    errors.Add("Equipment page must not use hunting/boss tabs.");
-                if (!menu.UsesUnifiedDualEffectCards)
-                    errors.Add("Equipment cards must show both battle effects.");
+                if (!detailMenu.UsesLeftCatalogAndRightDetail)
+                    errors.Add("Equipment page must place the equipment catalog on the left and details on the right.");
+                if (!detailMenu.ShowsSelectedWeaponAppearance)
+                    errors.Add("Equipment detail must show the selected weapon appearance.");
+                if (!detailMenu.ShowsFullCombatDetails)
+                    errors.Add("Equipment detail must show identity, effects, damage, targets, range, hits and attack increase values.");
             }
 
             PrototypeShopAndDaily shop = FindFirstObjectByType<PrototypeShopAndDaily>();

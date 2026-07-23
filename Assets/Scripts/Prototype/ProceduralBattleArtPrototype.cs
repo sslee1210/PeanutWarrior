@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using PeanutWarrior.Core;
 using UnityEngine;
 
@@ -72,19 +73,23 @@ namespace PeanutWarrior.Prototype
         private void Start()
         {
             stageFlow = FindFirstObjectByType<StageFlowController>();
-            TextAsset atlasText = Resources.Load<TextAsset>(
-                "PeanutWarrior/peanut_battle_atlas");
-            if (atlasText == null)
+            StringBuilder atlasBase64 = new StringBuilder(90112);
+            for (int index = 0; index < 8; index++)
             {
-                Debug.LogError(
-                    "Peanut battle atlas was not found at Resources/PeanutWarrior/peanut_battle_atlas.");
-                enabled = false;
-                return;
+                TextAsset chunk = Resources.Load<TextAsset>(
+                    $"PeanutWarrior/AtlasChunks/peanut_battle_atlas_{index:00}");
+                if (chunk == null)
+                {
+                    Debug.LogError($"Peanut battle atlas chunk {index:00} was not found.");
+                    enabled = false;
+                    return;
+                }
+                atlasBase64.Append(chunk.text.Trim());
             }
 
             try
             {
-                byte[] imageBytes = Convert.FromBase64String(atlasText.text.Trim());
+                byte[] imageBytes = Convert.FromBase64String(atlasBase64.ToString());
                 atlasTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                 if (!atlasTexture.LoadImage(imageBytes, false))
                     throw new InvalidOperationException("Texture2D.LoadImage returned false.");

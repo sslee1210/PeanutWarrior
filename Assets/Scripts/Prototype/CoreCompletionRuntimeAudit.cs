@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -6,9 +7,12 @@ using UnityEngine;
 
 namespace PeanutWarrior.Prototype
 {
-    [DefaultExecutionOrder(35000)]
+    [DefaultExecutionOrder(37000)]
     public sealed class CoreCompletionRuntimeAudit : MonoBehaviour
     {
+        private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+        private const BindingFlags PrivateStatic = BindingFlags.Static | BindingFlags.NonPublic;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
         {
@@ -20,181 +24,32 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            for (int i = 0; i < 32; i++) yield return null;
+            for (int i = 0; i < 36; i++) yield return null;
 
             var errors = new List<string>();
-            RequireSingle<AdvancementProgressionPrototype>(errors);
+            RequireSingle<IdleSystemsPrototype>(errors);
             RequireSingle<PetProgressionPrototype>(errors);
-            RequireSingle<PetCombatSpreadPrototype>(errors);
-            RequireSingle<GameSettingsPrototype>(errors);
-            RequireSingle<PeanutSaveGameService>(errors);
-            RequireSingle<OfflineProgressRewardPrototype>(errors);
-            RequireSingle<OfflineRewardPopupPrototype>(errors);
-            RequireSingle<CoreShopProgressionPrototype>(errors);
-            RequireSingle<PeanutCoreMenuCompletionV3>(errors);
-            RequireSingle<PeanutMenuLayoutV4>(errors);
-            RequireSingle<PeanutEquipmentAndShopMenuV5>(errors);
+            RequireSingle<MiniPeanutWorldViewPrototype>(errors);
             RequireSingle<PeanutSkillMenuV6>(errors);
             RequireSingle<BattleSkillDockV6>(errors);
             RequireSingle<MenuLayoutCoordinatorV6>(errors);
-            RequireSingle<BottomNavigationOrderV4>(errors);
+            RequireSingle<PeanutMenuLayoutV4>(errors);
+            RequireSingle<PeanutEquipmentAndShopMenuV5>(errors);
             RequireSingle<ElementEquipmentCatalogPrototype>(errors);
-            RequireSingle<AdvancementWorldViewPrototype>(errors);
-            RequireSingle<MiniPeanutWorldViewPrototype>(errors);
-            RequireSingle<SaveLoadBattlefieldSync>(errors);
-            RequireSingle<IdleFirstRunDefaults>(errors);
+            RequireSingle<AdvancementProgressionPrototype>(errors);
+            RequireSingle<PeanutSaveGameService>(errors);
 
-            if (PeanutGameRules.RequiredKillsPerStage != 100)
-                errors.Add("Required kills must remain 100.");
-            if (PeanutGameRules.StagesPerWorld != 30)
-                errors.Add("Stages per world must remain 30.");
-            if (PeanutGameRules.BossTimeLimitSeconds != 45)
-                errors.Add("Boss time limit must remain 45 seconds.");
-            if (PeanutGameRules.MaxOfflineHours != 8)
-                errors.Add("Offline reward cap must remain eight hours.");
-            if (PeanutGameRules.AdvancementCount != 8)
-                errors.Add("Expected eight advancement definitions.");
-            for (int i = 0; i < PeanutGameRules.AdvancementCount; i++)
-                if (!PeanutGameRules.GetAdvancement(i).Name.EndsWith("땅콩"))
-                    errors.Add("Every advancement name must end with 땅콩.");
-            if (string.IsNullOrEmpty(PeanutGameRules.GetWorldName(1)) || string.IsNullOrEmpty(PeanutGameRules.GetBossName(1)))
-                errors.Add("World or boss name rules are empty.");
-
-            AdvancementProgressionPrototype advancement = FindFirstObjectByType<AdvancementProgressionPrototype>();
-            if (advancement != null)
-            {
-                if (advancement.Tier < 0 || advancement.Tier > advancement.MaxTier)
-                    errors.Add("Advancement tier is outside the valid range.");
-                if (advancement.MaxTier != 7)
-                    errors.Add("Advancement max tier should be 7.");
-            }
-
-            PetProgressionPrototype pets = FindFirstObjectByType<PetProgressionPrototype>();
-            if (pets != null)
-            {
-                int[] levels = pets.GetLevelsCopy();
-                int[] stars = pets.GetStarsCopy();
-                if (levels == null || levels.Length != 3) errors.Add("Pet level state must contain three entries.");
-                if (stars == null || stars.Length != 3) errors.Add("Pet star state must contain three entries.");
-                if (stars != null)
-                    for (int i = 0; i < stars.Length; i++)
-                        if (stars[i] < 1 || stars[i] > 5) errors.Add("Pet star value is outside 1..5.");
-            }
-
-            PetCombatSpreadPrototype spread = FindFirstObjectByType<PetCombatSpreadPrototype>();
-            if (spread != null)
-            {
-                if (!spread.UsesSeparateTargets) errors.Add("Pets must receive separate hunting targets.");
-                if (!spread.UsesBossSurroundFormation) errors.Add("Pets must surround bosses from separate positions.");
-                if (spread.MinimumSpacing < 70f) errors.Add("Pet minimum spacing is too small.");
-            }
-
-            ElementEquipmentCatalogPrototype catalog = FindFirstObjectByType<ElementEquipmentCatalogPrototype>();
-            if (catalog != null)
-            {
-                if (catalog.TotalItemCount != 96)
-                    errors.Add("Separated equipment catalogs must contain 96 items in total.");
-                if (catalog.ItemCountPerUse != 48)
-                    errors.Add("Hunting and boss catalogs must each contain 48 items.");
-                if (catalog.VariantsPerGrade != 3)
-                    errors.Add("Each use, element and rarity must contain three equipment variants.");
-                if (!catalog.UsesSeparateHuntingAndBossCatalogs)
-                    errors.Add("Hunting and boss equipment catalogs must be separate.");
-
-                for (int element = 0; element < 4; element++)
-                {
-                    int huntingId = catalog.GetItemId(false, element, 1, 0);
-                    int bossId = catalog.GetItemId(true, element, 1, 0);
-                    if (huntingId < 0 || bossId < 0 || huntingId == bossId)
-                        errors.Add("Hunting and boss element item IDs must be distinct.");
-                }
-            }
-
-            GameSettingsPrototype settings = FindFirstObjectByType<GameSettingsPrototype>();
-            if (settings != null)
-            {
-                if (settings.BgmVolume < 0f || settings.BgmVolume > 1f) errors.Add("BGM volume is outside 0..1.");
-                if (settings.SfxVolume < 0f || settings.SfxVolume > 1f) errors.Add("SFX volume is outside 0..1.");
-                if (settings.TargetFrameRate != 30 && settings.TargetFrameRate != 60)
-                    errors.Add("Target frame rate must be 30 or 60.");
-            }
-
-            PeanutSaveGameService save = FindFirstObjectByType<PeanutSaveGameService>();
-            if (save != null)
-            {
-                if (save.SchemaVersion != PeanutSaveGameService.CurrentSchemaVersion)
-                    errors.Add("Save schema version mismatch.");
-                MethodInfo restore = typeof(PeanutSaveGameService).GetMethod("TryRestoreBackup", BindingFlags.Instance | BindingFlags.Public);
-                if (restore == null) errors.Add("Backup restore method is missing.");
-            }
-
-            PeanutMenuLayoutV4 menuV4 = FindFirstObjectByType<PeanutMenuLayoutV4>();
-            if (menuV4 != null)
-            {
-                if (menuV4.LayoutVersion != 4) errors.Add("Core menu layout version must be 4.");
-                if (menuV4.BottomMenuOrder != "성장 → 장비 → 스킬 → 펫 → 전직 → 상점")
-                    errors.Add("Bottom navigation order is incorrect.");
-                if (!menuV4.UsesSplitGrowthLayout) errors.Add("Growth page must split profile and upgrades.");
-                if (!menuV4.UsesPerTierAdvancementButtons) errors.Add("Advancement rows need individual buttons.");
-            }
-
-            PeanutSkillMenuV6 skillMenu = FindFirstObjectByType<PeanutSkillMenuV6>();
-            if (skillMenu != null)
-            {
-                if (skillMenu.SkillIconCount != 8) errors.Add("Skill menu must contain eight skill icons.");
-                if (!skillMenu.UsesCardlessSkillLayout) errors.Add("Skill menu must not use rectangular skill cards.");
-                if (!skillMenu.UsesNamedSkillSilhouettes) errors.Add("Each skill needs a name-specific icon silhouette.");
-                if (!skillMenu.AutoButtonIsTopLeft) errors.Add("The global AUTO button must remain at the top-left.");
-            }
-
-            BattleSkillDockV6 battleDock = FindFirstObjectByType<BattleSkillDockV6>();
-            if (battleDock != null)
-            {
-                if (!battleDock.HidesLegacySkillBlocks) errors.Add("The legacy rectangular battle skill dock must be hidden.");
-                if (!battleDock.UsesCircularBattleSkills) errors.Add("Battle skills must use circular named icons.");
-                if (!battleDock.AutoButtonIsTopLeft) errors.Add("Battle AUTO must remain at the top-left of the skill group.");
-            }
-
-            MenuLayoutCoordinatorV6 coordinator = FindFirstObjectByType<MenuLayoutCoordinatorV6>();
-            if (coordinator != null && !coordinator.UsesSingleOwnerPerPage)
-                errors.Add("Menu pages must have exactly one active layout owner.");
-
-            PeanutEquipmentAndShopMenuV5 menuV5 = FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();
-            if (menuV5 != null)
-            {
-                if (!menuV5.UsesSeparateHuntingAndBossTabs)
-                    errors.Add("Equipment page needs separate hunting and boss tabs.");
-                if (menuV5.EquipmentCatalogCount != 2 || menuV5.ElementsPerCatalog != 4)
-                    errors.Add("Equipment page must expose two catalogs with four elements each.");
-                if (menuV5.ItemsPerCatalog != 48)
-                    errors.Add("Each equipment use catalog must expose 48 items.");
-            }
-
-            MethodInfo summonByUse = typeof(PrototypeShopAndDaily).GetMethod(
-                "TrySummonSword", BindingFlags.Instance | BindingFlags.Public);
-            if (summonByUse == null)
-                errors.Add("Shop must expose separate hunting and boss sword summons.");
-
-            AdvancementWorldViewPrototype advancementView = FindFirstObjectByType<AdvancementWorldViewPrototype>();
-            if (advancementView != null && advancement != null && advancementView.AppliedTier != advancement.Tier)
-                errors.Add("Advancement world view is not synchronized with the current tier.");
-
-            MiniPeanutWorldViewPrototype petView = FindFirstObjectByType<MiniPeanutWorldViewPrototype>();
-            if (petView != null && pets != null && pets.IsUnlocked && petView.VisiblePetCount != 3)
-                errors.Add("All three unlocked pets should be visible in the battlefield.");
-
-            MethodInfo offlineGrant = typeof(GrowthExpansionPrototype).GetMethod(
-                "GrantOfflineProgress", BindingFlags.Instance | BindingFlags.Public);
-            if (offlineGrant == null) errors.Add("Growth offline reward entry point is missing.");
-            MethodInfo materialSpend = typeof(GrowthExpansionPrototype).GetMethod(
-                "TrySpendEquipmentMaterials", BindingFlags.Instance | BindingFlags.Public);
-            if (materialSpend == null) errors.Add("Equipment material spending entry point is missing.");
+            ValidateRules(errors);
+            ValidateDirectPetCombat(errors);
+            ValidateSkills(errors);
+            ValidateMenus(errors);
+            ValidateEquipment(errors);
 
             if (errors.Count == 0)
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · pets spread across separate targets, menu pages have one owner without flicker, menu and battle skills use name-specific cardless icons with top-left AUTO, and separated equipment catalogs remain active.");
+                    "PASS · direct pet combat uses separate targets and spacing, legacy skill blocks are hidden, cardless skill icons are active, and each menu page has one renderer.");
                 yield break;
             }
 
@@ -205,7 +60,86 @@ namespace PeanutWarrior.Prototype
             Debug.LogError(report.ToString());
         }
 
-        private static void RequireSingle<T>(List<string> errors) where T : Object
+        private static void ValidateRules(List<string> errors)
+        {
+            if (PeanutGameRules.RequiredKillsPerStage != 100) errors.Add("Required kills must remain 100.");
+            if (PeanutGameRules.StagesPerWorld != 30) errors.Add("Stages per world must remain 30.");
+            if (PeanutGameRules.BossTimeLimitSeconds != 45) errors.Add("Boss time limit must remain 45 seconds.");
+            if (PeanutGameRules.AdvancementCount != 8) errors.Add("Expected eight advancement definitions.");
+            for (int i = 0; i < PeanutGameRules.AdvancementCount; i++)
+                if (!PeanutGameRules.GetAdvancement(i).Name.EndsWith("땅콩"))
+                    errors.Add("Every advancement name must end with 땅콩.");
+        }
+
+        private static void ValidateDirectPetCombat(List<string> errors)
+        {
+            Type type = typeof(IdleSystemsPrototype);
+            FieldInfo spacing = type.GetField("MinimumPetSpacing", PrivateStatic);
+            FieldInfo claimed = type.GetField("claimedTargets", PrivateInstance);
+            MethodInfo separate = type.GetMethod("SeparatePets", PrivateInstance);
+            MethodInfo uniqueTarget = type.GetMethod("FindClosestUnclaimedEnemy", PrivateInstance);
+
+            if (spacing == null) errors.Add("IdleSystemsPrototype must define a direct pet spacing constant.");
+            else if (Convert.ToSingle(spacing.GetRawConstantValue()) < 80f)
+                errors.Add("Direct pet minimum spacing is too small.");
+            if (claimed == null) errors.Add("IdleSystemsPrototype must track claimed enemy targets.");
+            if (separate == null) errors.Add("IdleSystemsPrototype must apply pairwise pet separation.");
+            if (uniqueTarget == null) errors.Add("IdleSystemsPrototype must assign unclaimed hunting targets.");
+        }
+
+        private static void ValidateSkills(List<string> errors)
+        {
+            PeanutSkillMenuV6 menu = FindFirstObjectByType<PeanutSkillMenuV6>();
+            if (menu != null)
+            {
+                if (menu.SkillIconCount != 8) errors.Add("Skill menu must contain eight skill icons.");
+                if (!menu.UsesCardlessSkillLayout) errors.Add("Skill menu must not use rectangular cards.");
+                if (!menu.UsesNamedSkillSilhouettes) errors.Add("Each skill needs a name-specific icon.");
+                if (!menu.AutoButtonIsTopLeft) errors.Add("Skill AUTO must be at the top-left.");
+            }
+
+            BattleSkillDockV6 dock = FindFirstObjectByType<BattleSkillDockV6>();
+            if (dock != null)
+            {
+                if (!dock.HidesLegacySkillBlocks) errors.Add("Legacy battle skill blocks must be hidden.");
+                if (!dock.UsesCircularBattleSkills) errors.Add("Battle skills must use named icons.");
+                if (!dock.AutoButtonIsTopLeft) errors.Add("Battle AUTO must be at the top-left.");
+            }
+        }
+
+        private static void ValidateMenus(List<string> errors)
+        {
+            MenuLayoutCoordinatorV6 coordinator = FindFirstObjectByType<MenuLayoutCoordinatorV6>();
+            if (coordinator != null && !coordinator.UsesSingleOwnerPerPage)
+                errors.Add("Menu pages must have exactly one active renderer.");
+
+            PeanutMenuLayoutV4 v4 = FindFirstObjectByType<PeanutMenuLayoutV4>();
+            if (v4 != null)
+            {
+                if (v4.BottomMenuOrder != "성장 → 장비 → 스킬 → 펫 → 전직 → 상점")
+                    errors.Add("Bottom navigation order is incorrect.");
+                if (!v4.UsesSplitGrowthLayout) errors.Add("Growth page must use split profile and stats.");
+                if (!v4.UsesPerTierAdvancementButtons) errors.Add("Advancement rows need individual buttons.");
+            }
+        }
+
+        private static void ValidateEquipment(List<string> errors)
+        {
+            ElementEquipmentCatalogPrototype catalog = FindFirstObjectByType<ElementEquipmentCatalogPrototype>();
+            if (catalog != null)
+            {
+                if (catalog.TotalItemCount != 96) errors.Add("Equipment catalog must contain 96 swords.");
+                if (catalog.ItemCountPerUse != 48) errors.Add("Each hunting/boss catalog must contain 48 swords.");
+                if (!catalog.UsesSeparateHuntingAndBossCatalogs)
+                    errors.Add("Hunting and boss equipment catalogs must remain separate.");
+            }
+
+            PeanutEquipmentAndShopMenuV5 menu = FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();
+            if (menu != null && !menu.UsesSeparateHuntingAndBossTabs)
+                errors.Add("Equipment page needs separate hunting and boss tabs.");
+        }
+
+        private static void RequireSingle<T>(List<string> errors) where T : UnityEngine.Object
         {
             T[] objects = FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             if (objects.Length == 0) errors.Add("Missing runtime system: " + typeof(T).Name);

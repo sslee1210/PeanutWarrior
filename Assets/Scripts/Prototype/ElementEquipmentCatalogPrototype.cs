@@ -8,6 +8,12 @@ namespace PeanutWarrior.Prototype
     [DefaultExecutionOrder(7400)]
     public sealed class ElementEquipmentCatalogPrototype : MonoBehaviour
     {
+        public enum EquipmentUse
+        {
+            Hunting = 0,
+            Boss = 1
+        }
+
         public enum EquipmentElement
         {
             Neutral = 0,
@@ -29,6 +35,7 @@ namespace PeanutWarrior.Prototype
         {
             public int Id;
             public string Name;
+            public EquipmentUse Use;
             public EquipmentElement Element;
             public EquipmentRarity Rarity;
             public int Variant;
@@ -36,12 +43,15 @@ namespace PeanutWarrior.Prototype
 
         private const string Prefix = "PeanutWarrior.ElementEquipment.";
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+        private const int CurrentSchemaVersion = 2;
+        private const int UseCount = 2;
         private const int ElementCount = 4;
         private const int RarityCount = 4;
         private const int VariantsPerRarity = 3;
-        private const int ItemCount = ElementCount * RarityCount * VariantsPerRarity;
+        private const int ItemsPerUse = ElementCount * RarityCount * VariantsPerRarity;
+        private const int ItemCount = UseCount * ItemsPerUse;
 
-        private static readonly string[,,] Names =
+        private static readonly string[,,] HuntingNames =
         {
             {
                 { "나뭇가지 검", "단단한 껍질검", "들판 수호검" },
@@ -69,6 +79,34 @@ namespace PeanutWarrior.Prototype
             }
         };
 
+        private static readonly string[,,] BossNames =
+        {
+            {
+                { "도전자 검", "거대수 사냥검", "결투 껍질검" },
+                { "토벌대 검", "파괴자 대검", "수호자 처단검" },
+                { "군주 절단검", "폭군 사냥검", "심판의 대검" },
+                { "보스 종결검", "왕의 파멸검", "차원 토벌검" }
+            },
+            {
+                { "화염 추적검", "불꽃 토벌검", "적열 처단검" },
+                { "홍련 사냥검", "용암 파괴검", "폭염 결투검" },
+                { "업화 심판검", "불사조 토벌검", "화신 절단검" },
+                { "태양 파멸검", "종말의 홍염검", "영겁의 화염검" }
+            },
+            {
+                { "빙결 추적검", "서리 토벌검", "냉기 처단검" },
+                { "설원 사냥검", "빙하 파괴검", "혹한 결투검" },
+                { "동토 심판검", "서리왕 토벌검", "빙결 절단검" },
+                { "절대영도 파멸검", "겨울왕 종결검", "영겁의 빙검" }
+            },
+            {
+                { "뇌전 추적검", "낙뢰 토벌검", "전광 처단검" },
+                { "천둥 사냥검", "폭풍 파괴검", "섬광 결투검" },
+                { "뇌신 심판검", "폭풍왕 토벌검", "천뢰 절단검" },
+                { "천벌 파멸검", "뇌광왕 종결검", "영겁의 낙뢰검" }
+            }
+        };
+
         private readonly EquipmentDefinition[] definitions = new EquipmentDefinition[ItemCount];
         private readonly int[] levels = new int[ItemCount];
         private readonly int[] copies = new int[ItemCount];
@@ -80,14 +118,17 @@ namespace PeanutWarrior.Prototype
         private FieldInfo bossElementField;
         private int huntingItem = -1;
         private int bossItem = -1;
-        private bool migrated;
-        private string lastMessage = "속성 장비 도감 준비";
+        private int schemaVersion;
+        private bool legacyMigrated;
+        private string lastMessage = "사냥·보스 장비 도감 준비";
 
         public int TotalItemCount => ItemCount;
+        public int ItemCountPerUse => ItemsPerUse;
         public int VariantsPerGrade => VariantsPerRarity;
         public string LastMessage => lastMessage;
         public int HuntingItem => huntingItem;
         public int BossItem => bossItem;
+        public bool UsesSeparateHuntingAndBossCatalogs => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -119,7 +160,9 @@ namespace PeanutWarrior.Prototype
             huntingElementField = arenaType.GetField("huntingElement", PrivateInstance);
             bossElementField = arenaType.GetField("bossElement", PrivateInstance);
             Load();
+            MigrateSharedCatalogToSeparatedCatalogs();
             MigrateLegacyCollection();
+            EnsureStarterEquipment();
             RepairEquippedItems();
             Save();
         }
@@ -129,22 +172,40 @@ namespace PeanutWarrior.Prototype
             return IsValidItem(itemId) ? definitions[itemId] : null;
         }
 
-        public int GetItemId(int elementIndex, int rarityIndex, int variant)
+        public int GetItemId(bool boss, int elementIndex, int rarityIndex, int variant)
         {
+            return GetItemId(boss ? EquipmentUse.Boss : EquipmentUse.Hunting, elementIndex, rarityIndex, variant);
+        }
+
+        public int GetItemId(EquipmentUse use, int elementIndex, int rarityIndex, int variant)
+        {
+            int useIndex = (int)use;
+            if (useIndex < 0 || useIndex >= UseCount) return -1;
             if (elementIndex < 0 || elementIndex >= ElementCount) return -1;
             if (rarityIndex < 1 || rarityIndex > RarityCount) return -1;
             if (variant < 0 || variant >= VariantsPerRarity) return -1;
-            return elementIndex * RarityCount * VariantsPerRarity +
+            return useIndex * ItemsPerUse +
+                   elementIndex * RarityCount * VariantsPerRarity +
                    (rarityIndex - 1) * VariantsPerRarity + variant;
+        }
+
+        public int GetItemId(int elementIndex, int rarityIndex, int variant)
+        {
+            return GetItemId(false, elementIndex, rarityIndex, variant);
+        }
+
+        public IEnumerable<int> GetItemIds(bool boss, int elementIndex, int rarityIndex)
+        {
+            for (int variant = 0; variant < VariantsPerRarity; variant++)
+            {
+                int id = GetItemId(boss, elementIndex, rarityIndex, variant);
+                if (id >= 0) yield return id;
+            }
         }
 
         public IEnumerable<int> GetItemIds(int elementIndex, int rarityIndex)
         {
-            for (int variant = 0; variant < VariantsPerRarity; variant++)
-            {
-                int id = GetItemId(elementIndex, rarityIndex, variant);
-                if (id >= 0) yield return id;
-            }
+            return GetItemIds(false, elementIndex, rarityIndex);
         }
 
         public int GetLevel(int itemId)
@@ -162,12 +223,17 @@ namespace PeanutWarrior.Prototype
             return GetCopies(itemId) > 0;
         }
 
-        public int GetOwnedCount(int elementIndex, int rarityIndex)
+        public int GetOwnedCount(bool boss, int elementIndex, int rarityIndex)
         {
             int count = 0;
-            foreach (int id in GetItemIds(elementIndex, rarityIndex))
+            foreach (int id in GetItemIds(boss, elementIndex, rarityIndex))
                 if (IsOwned(id)) count++;
             return count;
+        }
+
+        public int GetOwnedCount(int elementIndex, int rarityIndex)
+        {
+            return GetOwnedCount(false, elementIndex, rarityIndex);
         }
 
         public int GetUpgradeCost(int itemId)
@@ -192,13 +258,13 @@ namespace PeanutWarrior.Prototype
             return true;
         }
 
-        public void RegisterSummon(int elementIndex, int rarityIndex)
+        public void RegisterSummon(bool boss, int elementIndex, int rarityIndex)
         {
             elementIndex = Mathf.Clamp(elementIndex, 0, ElementCount - 1);
             rarityIndex = Mathf.Clamp(rarityIndex, 1, RarityCount);
-            int selected = GetItemId(elementIndex, rarityIndex, 0);
+            int selected = GetItemId(boss, elementIndex, rarityIndex, 0);
             int minimum = int.MaxValue;
-            foreach (int id in GetItemIds(elementIndex, rarityIndex))
+            foreach (int id in GetItemIds(boss, elementIndex, rarityIndex))
             {
                 if (copies[id] >= minimum) continue;
                 minimum = copies[id];
@@ -207,9 +273,15 @@ namespace PeanutWarrior.Prototype
 
             copies[selected]++;
             if (copies[selected] > 1 && copies[selected] % 3 == 0) levels[selected]++;
-            lastMessage = $"{definitions[selected].Name} 획득 · 보유 {copies[selected]}";
+            EquipmentDefinition definition = definitions[selected];
+            lastMessage = $"{UseName(boss)} {definition.Name} 획득 · 보유 {copies[selected]}";
             RepairEquippedItems();
             Save();
+        }
+
+        public void RegisterSummon(int elementIndex, int rarityIndex)
+        {
+            RegisterSummon(false, elementIndex, rarityIndex);
         }
 
         public bool EquipItem(int itemId, bool boss)
@@ -218,13 +290,17 @@ namespace PeanutWarrior.Prototype
             if (!IsOwned(itemId)) return Fail("보유하지 않은 장비입니다");
 
             EquipmentDefinition definition = definitions[itemId];
+            EquipmentUse expectedUse = boss ? EquipmentUse.Boss : EquipmentUse.Hunting;
+            if (definition.Use != expectedUse)
+                return Fail($"{UseName(boss)} 장비만 해당 슬롯에 장착할 수 있습니다");
+
             FieldInfo elementField = boss ? bossElementField : huntingElementField;
             if (elementField != null)
                 elementField.SetValue(arena, Enum.ToObject(elementField.FieldType, (int)definition.Element));
 
             if (boss) bossItem = itemId;
             else huntingItem = itemId;
-            lastMessage = $"{definition.Name} · {(boss ? "보스" : "사냥")} 장착";
+            lastMessage = $"{definition.Name} · {UseName(boss)} 장착";
             Save();
             return true;
         }
@@ -254,6 +330,11 @@ namespace PeanutWarrior.Prototype
             return GetItemDamageMultiplier(GetEquippedItem(boss));
         }
 
+        public string UseName(bool boss)
+        {
+            return boss ? "보스용" : "사냥용";
+        }
+
         public string ElementName(int elementIndex)
         {
             return elementIndex switch
@@ -280,29 +361,52 @@ namespace PeanutWarrior.Prototype
 
         private void BuildDefinitions()
         {
-            for (int element = 0; element < ElementCount; element++)
+            for (int use = 0; use < UseCount; use++)
             {
-                for (int rarity = 1; rarity <= RarityCount; rarity++)
+                for (int element = 0; element < ElementCount; element++)
                 {
-                    for (int variant = 0; variant < VariantsPerRarity; variant++)
+                    for (int rarity = 1; rarity <= RarityCount; rarity++)
                     {
-                        int id = GetItemId(element, rarity, variant);
-                        definitions[id] = new EquipmentDefinition
+                        for (int variant = 0; variant < VariantsPerRarity; variant++)
                         {
-                            Id = id,
-                            Name = Names[element, rarity - 1, variant],
-                            Element = (EquipmentElement)element,
-                            Rarity = (EquipmentRarity)rarity,
-                            Variant = variant
-                        };
+                            EquipmentUse equipmentUse = (EquipmentUse)use;
+                            int id = GetItemId(equipmentUse, element, rarity, variant);
+                            definitions[id] = new EquipmentDefinition
+                            {
+                                Id = id,
+                                Name = use == 0
+                                    ? HuntingNames[element, rarity - 1, variant]
+                                    : BossNames[element, rarity - 1, variant],
+                                Use = equipmentUse,
+                                Element = (EquipmentElement)element,
+                                Rarity = (EquipmentRarity)rarity,
+                                Variant = variant
+                            };
+                        }
                     }
                 }
             }
         }
 
+        private void MigrateSharedCatalogToSeparatedCatalogs()
+        {
+            if (schemaVersion >= CurrentSchemaVersion) return;
+
+            for (int localId = 0; localId < ItemsPerUse; localId++)
+            {
+                int bossId = ItemsPerUse + localId;
+                levels[bossId] = Mathf.Max(levels[bossId], levels[localId]);
+                copies[bossId] = Mathf.Max(copies[bossId], copies[localId]);
+            }
+
+            if (bossItem >= 0 && bossItem < ItemsPerUse) bossItem += ItemsPerUse;
+            schemaVersion = CurrentSchemaVersion;
+            lastMessage = "기존 공유 장비를 사냥용·보스용 장비군으로 분리 완료";
+        }
+
         private void MigrateLegacyCollection()
         {
-            if (migrated || legacySwords == null) return;
+            if (legacyMigrated || legacySwords == null) return;
             for (int element = 0; element < ElementCount; element++)
             {
                 for (int rarity = 1; rarity <= RarityCount; rarity++)
@@ -311,34 +415,68 @@ namespace PeanutWarrior.Prototype
                         element, (SwordProgressionPrototype.SwordRarity)rarity);
                     for (int copy = 0; copy < legacyCopies; copy++)
                     {
-                        int id = GetItemId(element, rarity, copy % VariantsPerRarity);
-                        copies[id]++;
+                        int variant = copy % VariantsPerRarity;
+                        int huntingId = GetItemId(false, element, rarity, variant);
+                        int bossId = GetItemId(true, element, rarity, variant);
+                        copies[huntingId]++;
+                        copies[bossId]++;
                     }
                 }
             }
-            migrated = true;
+            legacyMigrated = true;
+        }
+
+        private void EnsureStarterEquipment()
+        {
+            if (FindFirstOwned(false, 0) < 0)
+                copies[GetItemId(false, 0, 1, 0)] = 1;
+            if (FindFirstOwned(true, 0) < 0)
+                copies[GetItemId(true, 0, 1, 0)] = 1;
         }
 
         private void RepairEquippedItems()
         {
-            if (!IsOwned(huntingItem)) huntingItem = FindFirstOwned(ReadElement(huntingElementField));
-            if (!IsOwned(bossItem)) bossItem = FindFirstOwned(ReadElement(bossElementField));
+            if (!IsValidForUse(huntingItem, false) || !IsOwned(huntingItem))
+                huntingItem = FindFirstOwned(false, ReadElement(huntingElementField));
+            if (!IsValidForUse(bossItem, true) || !IsOwned(bossItem))
+                bossItem = FindFirstOwned(true, ReadElement(bossElementField));
+
+            ApplyEquippedElement(huntingItem, false);
+            ApplyEquippedElement(bossItem, true);
         }
 
-        private int FindFirstOwned(int preferredElement)
+        private int FindFirstOwned(bool boss, int preferredElement)
         {
             preferredElement = Mathf.Clamp(preferredElement, 0, ElementCount - 1);
             for (int rarity = RarityCount; rarity >= 1; rarity--)
-                foreach (int id in GetItemIds(preferredElement, rarity))
+                foreach (int id in GetItemIds(boss, preferredElement, rarity))
                     if (IsOwned(id)) return id;
-            for (int id = 0; id < ItemCount; id++)
+
+            int start = boss ? ItemsPerUse : 0;
+            int end = start + ItemsPerUse;
+            for (int id = start; id < end; id++)
                 if (IsOwned(id)) return id;
             return -1;
+        }
+
+        private void ApplyEquippedElement(int itemId, bool boss)
+        {
+            if (!IsValidForUse(itemId, boss)) return;
+            EquipmentDefinition definition = definitions[itemId];
+            FieldInfo field = boss ? bossElementField : huntingElementField;
+            if (field != null)
+                field.SetValue(arena, Enum.ToObject(field.FieldType, (int)definition.Element));
         }
 
         private int ReadElement(FieldInfo field)
         {
             return field == null || arena == null ? 0 : Mathf.Clamp(Convert.ToInt32(field.GetValue(arena)), 0, 3);
+        }
+
+        private bool IsValidForUse(int itemId, bool boss)
+        {
+            if (!IsValidItem(itemId)) return false;
+            return definitions[itemId].Use == (boss ? EquipmentUse.Boss : EquipmentUse.Hunting);
         }
 
         private bool Fail(string value)
@@ -354,7 +492,8 @@ namespace PeanutWarrior.Prototype
 
         private void Save()
         {
-            PlayerPrefs.SetInt(Prefix + "Migrated", migrated ? 1 : 0);
+            PlayerPrefs.SetInt(Prefix + "Schema", CurrentSchemaVersion);
+            PlayerPrefs.SetInt(Prefix + "Migrated", legacyMigrated ? 1 : 0);
             PlayerPrefs.SetInt(Prefix + "HuntingItem", huntingItem);
             PlayerPrefs.SetInt(Prefix + "BossItem", bossItem);
             for (int i = 0; i < ItemCount; i++)
@@ -367,7 +506,8 @@ namespace PeanutWarrior.Prototype
 
         private void Load()
         {
-            migrated = PlayerPrefs.GetInt(Prefix + "Migrated", 0) == 1;
+            schemaVersion = PlayerPrefs.GetInt(Prefix + "Schema", 1);
+            legacyMigrated = PlayerPrefs.GetInt(Prefix + "Migrated", 0) == 1;
             huntingItem = PlayerPrefs.GetInt(Prefix + "HuntingItem", -1);
             bossItem = PlayerPrefs.GetInt(Prefix + "BossItem", -1);
             for (int i = 0; i < ItemCount; i++)

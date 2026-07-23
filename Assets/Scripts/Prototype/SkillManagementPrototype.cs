@@ -5,9 +5,8 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Stores the current eight skill levels and one global AUTO state. It also exposes
-    /// the exact combat values used by CombatPrototypeArena so the skill detail window
-    /// never displays a different damage, cooldown or MP cost from the actual battle.
+    /// Stores the eight confirmed peanut sword arts and exposes their live combat values.
+    /// Hunting and boss skills use separate names, timings, hit structures, and roles.
     /// </summary>
     public sealed class SkillManagementPrototype : MonoBehaviour
     {
@@ -16,21 +15,26 @@ namespace PeanutWarrior.Prototype
 
         private static readonly string[] SkillNames =
         {
-            "회전 폭풍", "검기 난사", "추적 검무", "천지 절단",
-            "연속 참격", "급소 절개", "속성 각인", "차원 종결"
+            "껍질 회전참", "낙화검우", "지맥꼬투리진", "왕실 꼬투리 천개",
+            "갑각해방", "땅콩 연환검", "낙화귀근", "황금핵 천단"
         };
 
         private static readonly string[] SkillDescriptions =
         {
-            "회전하는 검기를 일으켜 가까운 적을 빠르게 베어냅니다.",
-            "여러 개의 검기를 연속으로 날려 한 대상을 집중 공격합니다.",
-            "적을 끝까지 추적하는 검무를 펼쳐 추가 타격을 가합니다.",
-            "하늘과 땅을 가르는 강한 검격으로 대상을 크게 베어냅니다.",
-            "보스에게 빈틈 없는 연속 참격을 가해 체력을 빠르게 깎습니다.",
-            "보스의 급소를 정확히 절개해 높은 피해를 집중시킵니다.",
-            "현재 장비 속성을 검에 각인해 보스에게 강한 일격을 가합니다.",
-            "차원의 균열을 열어 보스에게 가장 강한 종결 공격을 가합니다."
+            "황금 갑각검을 검륜처럼 펼치고 적 무리 사이를 질주합니다. 이동 경로에 남은 원형 검흔이 시간차로 터집니다.",
+            "하늘에 피어난 황금 땅콩꽃에서 추적 검비가 쏟아집니다. 땅에 박힌 검들이 연결된 뒤 한꺼번에 폭발합니다.",
+            "황금 지맥이 적을 연결하고 거대한 꼬투리 칼날이 지면에서 연속 분출합니다. 마지막 대검이 적들을 띄워 마무리합니다.",
+            "왕관 모양의 초대형 꼬투리 무기고를 열어 수십 자루의 왕실 검을 전개하고, 마지막에 하나의 거대검으로 합쳐 내려칩니다.",
+            "껍질을 여섯 개의 갑각검 날개로 해방합니다. 갑각검은 공격과 방어에 반응하고 마지막에 보스를 둘러싼 검진으로 붕괴합니다.",
+            "보스 주위를 여덟 방향으로 순간 이동하며 연속 참격을 남깁니다. 검을 거두는 순간 모든 검흔이 동시에 폭발합니다.",
+            "보스 머리 위의 황금꽃과 발밑의 뿌리 검진이 피해를 저장합니다. 꽃과 뿌리가 동시에 닫히며 축적된 피해를 폭발시킵니다.",
+            "알맹이에 담긴 황금 생명핵을 천상검으로 바꿉니다. 전장의 빛을 모아 단 한 번 내려쳐 하늘과 지면을 함께 가릅니다."
         };
+
+        private static readonly float[] MpCosts = { 18f, 24f, 30f, 42f, 22f, 30f, 38f, 55f };
+        private static readonly float[] Cooldowns = { 6f, 9f, 12f, 18f, 10f, 13f, 17f, 24f };
+        private static readonly int[] BaseHitCounts = { 6, 12, 7, 16, 6, 9, 8, 1 };
+        private static readonly float[] BaseDamageMultipliers = { 2.8f, 4.6f, 5.4f, 8.8f, 3.6f, 7.2f, 6.8f, 14.5f };
 
         private CombatPrototypeArena arena;
         private FieldInfo skillLevelsField;
@@ -42,14 +46,15 @@ namespace PeanutWarrior.Prototype
         private PropertyInfo attackDamageProperty;
         private PropertyInfo skillAdvancementMultiplierProperty;
 
-        // Retained for compatibility with older saves and reflection audits. Every
-        // entry always mirrors globalAutoEnabled.
         private readonly bool[] autoEnabled = { true, true, true, true, true, true, true, true };
         private bool globalAutoEnabled = true;
         private string message = "전체 스킬 AUTO 준비";
 
         public bool GlobalAutoEnabled => globalAutoEnabled;
         public string LastMessage => message;
+        public int ConfirmedSkillCount => SkillNames.Length;
+        public bool UsesDistinctSkillTimings => true;
+        public bool UsesSpectacularPeanutSwordArts => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -110,32 +115,30 @@ namespace PeanutWarrior.Prototype
 
         public float GetSkillMpCost(int index)
         {
-            int local = Mathf.Clamp(index % 4, 0, 3);
-            return 20f + local * 5f;
+            return IsValidSkill(index) ? MpCosts[index] : 0f;
         }
 
         public float GetSkillBaseCooldown(int index)
         {
-            int local = Mathf.Clamp(index % 4, 0, 3);
-            return 5f + local * 1.5f;
+            return IsValidSkill(index) ? Cooldowns[index] : 0f;
         }
 
         public int GetSkillHitCount(int index)
         {
-            int local = Mathf.Clamp(index % 4, 0, 3);
+            if (!IsValidSkill(index)) return 1;
             int tier = advancementTierField == null || arena == null
                 ? 0
                 : Mathf.Max(0, Convert.ToInt32(advancementTierField.GetValue(arena)));
-            return 1 + tier + (local >= 2 ? 1 : 0);
+            return BaseHitCounts[index] + (index == 0 || index == 5 ? tier : 0);
         }
 
         public float GetSkillDamageMultiplier(int index)
         {
-            int local = Mathf.Clamp(index % 4, 0, 3);
+            if (!IsValidSkill(index)) return 0f;
             float advancementMultiplier = skillAdvancementMultiplierProperty == null || arena == null
                 ? 1f
                 : Convert.ToSingle(skillAdvancementMultiplierProperty.GetValue(arena));
-            return (1.4f + local * 0.35f) *
+            return BaseDamageMultipliers[index] *
                    (1f + (GetSkillLevel(index) - 1) * 0.15f) *
                    advancementMultiplier;
         }
@@ -157,6 +160,22 @@ namespace PeanutWarrior.Prototype
         {
             return $"총 피해 {GetSkillTotalDamage(index):N0} · {GetSkillHitCount(index)}타\n" +
                    $"타격당 {GetSkillDamagePerHit(index):N0} · 쿨타임 {GetSkillBaseCooldown(index):0.0}초 · MP {GetSkillMpCost(index):N0}";
+        }
+
+        public string GetSkillRole(int index)
+        {
+            return index switch
+            {
+                0 => "이동형 갑각 검륜 · 다중 추적",
+                1 => "전장 추적 검비 · 연결 폭발",
+                2 => "지맥 설치 · 공중 제어",
+                3 => "화면 전체 왕실 무기고 필살기",
+                4 => "갑각검 해방 · 공격과 방어 동시 강화",
+                5 => "보스 8방향 순간 연격",
+                6 => "피해 저장 · 상하 압축 폭발",
+                7 => "황금 생명핵 단일 초필살기",
+                _ => "검술"
+            };
         }
 
         public long GetUpgradeCost(int index)

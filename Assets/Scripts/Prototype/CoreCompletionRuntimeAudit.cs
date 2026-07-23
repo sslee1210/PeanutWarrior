@@ -35,6 +35,7 @@ namespace PeanutWarrior.Prototype
             RequireSingle<PeanutMenuLayoutV4>(errors);
             RequireSingle<PeanutEquipmentAndShopMenuV5>(errors);
             RequireSingle<PeanutSkillMenuV6>(errors);
+            RequireSingle<BattleSkillDockV6>(errors);
             RequireSingle<MenuLayoutCoordinatorV6>(errors);
             RequireSingle<BottomNavigationOrderV4>(errors);
             RequireSingle<ElementEquipmentCatalogPrototype>(errors);
@@ -146,6 +147,14 @@ namespace PeanutWarrior.Prototype
                 if (!skillMenu.AutoButtonIsTopLeft) errors.Add("The global AUTO button must remain at the top-left.");
             }
 
+            BattleSkillDockV6 battleDock = FindFirstObjectByType<BattleSkillDockV6>();
+            if (battleDock != null)
+            {
+                if (!battleDock.HidesLegacySkillBlocks) errors.Add("The legacy rectangular battle skill dock must be hidden.");
+                if (!battleDock.UsesCircularBattleSkills) errors.Add("Battle skills must use circular named icons.");
+                if (!battleDock.AutoButtonIsTopLeft) errors.Add("Battle AUTO must remain at the top-left of the skill group.");
+            }
+
             MenuLayoutCoordinatorV6 coordinator = FindFirstObjectByType<MenuLayoutCoordinatorV6>();
             if (coordinator != null && !coordinator.UsesSingleOwnerPerPage)
                 errors.Add("Menu pages must have exactly one active layout owner.");
@@ -185,7 +194,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · pets use separate targets and spacing, menu pages have one owner without flicker, skills use eight name-specific cardless icons with top-left AUTO, and the separated equipment catalogs remain active.");
+                    "PASS · pets spread across separate targets, menu pages have one owner without flicker, menu and battle skills use name-specific cardless icons with top-left AUTO, and separated equipment catalogs remain active.");
                 yield break;
             }
 

@@ -14,7 +14,7 @@ namespace PeanutWarrior.Prototype
     {
         private const int AtlasColumns = 6;
         private const int AtlasRows = 4;
-        private const float PixelsPerUnit = 220f;
+        private const float WorldTileSize = 1.45f;
 
         private enum UnitKind
         {
@@ -148,6 +148,7 @@ namespace PeanutWarrior.Prototype
         {
             int tileWidth = atlasTexture.width / AtlasColumns;
             int tileHeight = atlasTexture.height / AtlasRows;
+            float pixelsPerUnit = tileWidth / WorldTileSize;
 
             for (int index = 0; index < atlasSprites.Length; index++)
             {
@@ -160,7 +161,7 @@ namespace PeanutWarrior.Prototype
                     atlasTexture,
                     new Rect(x, y, tileWidth, tileHeight),
                     new Vector2(0.5f, 0.5f),
-                    PixelsPerUnit,
+                    pixelsPerUnit,
                     0,
                     SpriteMeshType.FullRect);
                 atlasSprites[index].name = $"PeanutBattleArt_{index:00}";

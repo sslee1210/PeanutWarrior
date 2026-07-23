@@ -58,7 +58,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · eight spectacular peanut sword arts use distinct combat, tactical AUTO, synchronized icons and unique visual sequences; basic attacks, equipment detail and extreme execution remain connected.");
+                    "PASS · eight spectacular peanut sword arts use cooldown-completion AUTO, opening overlap and advancement evolution; synchronized visuals, equipment detail and extreme execution remain connected.");
                 yield break;
             }
 
@@ -126,20 +126,29 @@ namespace PeanutWarrior.Prototype
                 if (skills.ConfirmedSkillCount != 8) errors.Add("Exactly eight confirmed skills are required.");
                 if (!skills.UsesDistinctSkillTimings) errors.Add("Every skill must use its own MP and cooldown values.");
                 if (!skills.UsesSpectacularPeanutSwordArts) errors.Add("Skills must use the confirmed spectacular peanut sword-art set.");
+                if (!skills.UsesAdvancementSkillEvolution) errors.Add("Advancement must evolve every skill's real combat values.");
+                if (skills.CurrentAdvancementTier < 0 || skills.CurrentAdvancementTier >= PeanutGameRules.AdvancementCount)
+                    errors.Add("Current advancement tier is outside the eight-tier range.");
 
                 string[] expected =
                 {
                     "껍질 회전참", "낙화검우", "지맥꼬투리진", "왕실 꼬투리 천개",
                     "갑각해방", "땅콩 연환검", "낙화귀근", "황금핵 천단"
                 };
-                float[] expectedMp = { 20f, 25f, 30f, 42f, 22f, 30f, 38f, 55f };
-                float[] expectedCooldowns = { 6f, 9f, 12f, 18f, 10f, 13f, 17f, 24f };
+                float[] maximumMp = { 20f, 25f, 30f, 42f, 22f, 30f, 38f, 55f };
+                float[] maximumCooldowns = { 6f, 9f, 12f, 18f, 10f, 13f, 17f, 24f };
                 for (int i = 0; i < expected.Length; i++)
                 {
                     if (skills.GetSkillName(i) != expected[i]) errors.Add("Unexpected skill name at index " + i + ".");
                     if (string.IsNullOrWhiteSpace(skills.GetSkillDescription(i))) errors.Add("Skill description is missing at index " + i + ".");
-                    if (!Mathf.Approximately(skills.GetSkillMpCost(i), expectedMp[i])) errors.Add("Unexpected skill MP cost at index " + i + ".");
-                    if (!Mathf.Approximately(skills.GetSkillBaseCooldown(i), expectedCooldowns[i])) errors.Add("Unexpected skill cooldown at index " + i + ".");
+                    if (skills.GetSkillMpCost(i) <= 0f || skills.GetSkillMpCost(i) > maximumMp[i])
+                        errors.Add("Advancement-adjusted skill MP cost is invalid at index " + i + ".");
+                    if (skills.GetSkillBaseCooldown(i) <= 0f || skills.GetSkillBaseCooldown(i) > maximumCooldowns[i])
+                        errors.Add("Advancement-adjusted skill cooldown is invalid at index " + i + ".");
+                    if (skills.GetSkillAdvancementDamageBonus(i) < 0f)
+                        errors.Add("Advancement damage bonus is invalid at index " + i + ".");
+                    if (string.IsNullOrWhiteSpace(skills.GetSkillAdvancementSummary(i)))
+                        errors.Add("Advancement skill summary is missing at index " + i + ".");
                 }
             }
 
@@ -147,13 +156,13 @@ namespace PeanutWarrior.Prototype
             if (autoGate != null)
             {
                 if (!autoGate.UsesConfirmedMpCosts)
-                    errors.Add("AUTO must gate casts with each skill's confirmed MP cost.");
-                if (!autoGate.UsesTacticalAutoPriority)
-                    errors.Add("AUTO must use the confirmed tactical priority for each battle mode.");
-                if (autoGate.HuntingAutoPriority != "지맥꼬투리진 → 왕실 꼬투리 천개 → 낙화검우 → 껍질 회전참")
-                    errors.Add("Hunting AUTO priority is incorrect.");
-                if (autoGate.BossAutoPriority != "갑각해방 → 낙화귀근 → 땅콩 연환검 → 황금핵 천단")
-                    errors.Add("Boss AUTO priority is incorrect.");
+                    errors.Add("AUTO must use each advancement-adjusted MP cost.");
+                if (!autoGate.UsesCooldownCompletionOrder)
+                    errors.Add("AUTO must cast skills in cooldown-completion order.");
+                if (!autoGate.AllowsOpeningSkillOverlap)
+                    errors.Add("AUTO must overlap all initially-ready skills in the opening volley.");
+                if (autoGate.UsesTacticalAutoPriority)
+                    errors.Add("Fixed tactical skill priority must remain disabled.");
             }
 
             SpectacularPeanutSkillCombatPrototype combat = FindFirstObjectByType<SpectacularPeanutSkillCombatPrototype>();

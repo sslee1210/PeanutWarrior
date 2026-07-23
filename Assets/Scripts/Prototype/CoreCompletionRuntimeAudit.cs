@@ -12,6 +12,7 @@ namespace PeanutWarrior.Prototype
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
         private const BindingFlags PrivateStatic = BindingFlags.Static | BindingFlags.NonPublic;
+        private const BindingFlags PublicStatic = BindingFlags.Static | BindingFlags.Public;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -62,13 +63,24 @@ namespace PeanutWarrior.Prototype
 
         private static void ValidateRules(List<string> errors)
         {
-            if (PeanutGameRules.RequiredKillsPerStage != 100) errors.Add("Required kills must remain 100.");
-            if (PeanutGameRules.StagesPerWorld != 30) errors.Add("Stages per world must remain 30.");
-            if (PeanutGameRules.BossTimeLimitSeconds != 45) errors.Add("Boss time limit must remain 45 seconds.");
+            int requiredKills = ReadPublicConstant(nameof(PeanutGameRules.RequiredKillsPerStage));
+            int stagesPerWorld = ReadPublicConstant(nameof(PeanutGameRules.StagesPerWorld));
+            int bossTimeLimit = ReadPublicConstant(nameof(PeanutGameRules.BossTimeLimitSeconds));
+
+            if (requiredKills != 100) errors.Add("Required kills must remain 100.");
+            if (stagesPerWorld != 30) errors.Add("Stages per world must remain 30.");
+            if (bossTimeLimit != 45) errors.Add("Boss time limit must remain 45 seconds.");
             if (PeanutGameRules.AdvancementCount != 8) errors.Add("Expected eight advancement definitions.");
             for (int i = 0; i < PeanutGameRules.AdvancementCount; i++)
                 if (!PeanutGameRules.GetAdvancement(i).Name.EndsWith("땅콩"))
                     errors.Add("Every advancement name must end with 땅콩.");
+        }
+
+        private static int ReadPublicConstant(string fieldName)
+        {
+            FieldInfo field = typeof(PeanutGameRules).GetField(fieldName, PublicStatic);
+            if (field == null || !field.IsLiteral) return int.MinValue;
+            return Convert.ToInt32(field.GetRawConstantValue());
         }
 
         private static void ValidateDirectPetCombat(List<string> errors)
@@ -110,8 +122,13 @@ namespace PeanutWarrior.Prototype
         private static void ValidateMenus(List<string> errors)
         {
             MenuLayoutCoordinatorV6 coordinator = FindFirstObjectByType<MenuLayoutCoordinatorV6>();
-            if (coordinator != null && !coordinator.UsesSingleOwnerPerPage)
-                errors.Add("Menu pages must have exactly one active renderer.");
+            if (coordinator != null)
+            {
+                if (!coordinator.UsesSingleOwnerPerPage)
+                    errors.Add("Menu pages must have exactly one active renderer.");
+                if (!coordinator.KeepsLegacyLayoutLoopsDisabled)
+                    errors.Add("Legacy menu layout loops must remain disabled.");
+            }
 
             PeanutMenuLayoutV4 v4 = FindFirstObjectByType<PeanutMenuLayoutV4>();
             if (v4 != null)

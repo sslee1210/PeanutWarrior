@@ -36,12 +36,15 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
-        public void Pets_ExposeThreeSlotCollectionAndRestoreApi()
+        public void Pets_ExposeCollectionAndSeparateCombatContracts()
         {
             Assert.NotNull(typeof(PetProgressionPrototype).GetMethod("GetLevelsCopy", PublicInstance));
             Assert.NotNull(typeof(PetProgressionPrototype).GetMethod("GetStarsCopy", PublicInstance));
             Assert.NotNull(typeof(PetProgressionPrototype).GetMethod("RestoreState", PublicInstance));
             Assert.NotNull(typeof(PetProgressionPrototype).GetMethod("SpendGoldToTrain", PublicInstance));
+            Assert.NotNull(typeof(PetCombatSpreadPrototype).GetProperty("MinimumSpacing", PublicInstance));
+            Assert.NotNull(typeof(PetCombatSpreadPrototype).GetProperty("UsesSeparateTargets", PublicInstance));
+            Assert.NotNull(typeof(PetCombatSpreadPrototype).GetProperty("UsesBossSurroundFormation", PublicInstance));
         }
 
         [Test]
@@ -62,14 +65,23 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
-        public void MenuLayouts_ExposeConfirmedStructure()
+        public void MenuLayouts_ExposeConfirmedStructureWithoutFlicker()
         {
-            Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesCircularSkillLayout", PublicInstance));
             Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesSplitGrowthLayout", PublicInstance));
             Assert.NotNull(typeof(PeanutMenuLayoutV4).GetProperty("UsesPerTierAdvancementButtons", PublicInstance));
             Assert.NotNull(typeof(PeanutEquipmentAndShopMenuV5).GetProperty("UsesSeparateHuntingAndBossTabs", PublicInstance));
             Assert.NotNull(typeof(PeanutEquipmentAndShopMenuV5).GetProperty("EquipmentCatalogCount", PublicInstance));
             Assert.NotNull(typeof(BottomNavigationOrderV4).GetProperty("BottomMenuOrder", PublicInstance));
+            Assert.NotNull(typeof(MenuLayoutCoordinatorV6).GetProperty("UsesSingleOwnerPerPage", PublicInstance));
+        }
+
+        [Test]
+        public void SkillMenu_IsCardlessAndUsesNamedCircularIcons()
+        {
+            Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("SkillIconCount", PublicInstance));
+            Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("UsesCardlessSkillLayout", PublicInstance));
+            Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("UsesNamedSkillSilhouettes", PublicInstance));
+            Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("AutoButtonIsTopLeft", PublicInstance));
         }
 
         [Test]

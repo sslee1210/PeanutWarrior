@@ -104,13 +104,18 @@ namespace PeanutWarrior.Prototype
 
             if (name == "Button")
             {
-                Color original = image.color;
-                if (original.r > 0.72f && original.g < 0.42f)
-                    image.color = new Color(0.55f, 0.10f, 0.055f, 1f);
-                else if (original.r > 0.70f && original.g > 0.42f)
-                    image.color = new Color(0.70f, 0.36f, 0.025f, 1f);
-                else
-                    image.color = panelSoft;
+                Text caption = image.GetComponentInChildren<Text>(true);
+                string value = caption == null ? string.Empty : caption.text;
+                bool navigation = image.transform.parent != null && image.transform.parent.name == "Bottom Navigation";
+                bool danger = value.Contains("균왕") || value.Contains("보스") || value.Contains("도전");
+                bool reward = value.Contains("강화") || value.Contains("구매") || value.Contains("AUTO") || value.Contains("×");
+                image.color = navigation
+                    ? panelRaised
+                    : danger
+                        ? new Color(0.55f, 0.10f, 0.055f, 1f)
+                        : reward
+                            ? new Color(0.70f, 0.36f, 0.025f, 1f)
+                            : panelSoft;
                 AddOutline(image, goldEdge, 1.5f);
                 return;
             }

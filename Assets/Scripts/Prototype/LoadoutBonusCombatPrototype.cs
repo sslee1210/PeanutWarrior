@@ -34,6 +34,7 @@ namespace PeanutWarrior.Prototype
         public string LastMessage => lastMessage;
         public bool UsesHuntingMultiTargetPatterns => true;
         public bool UsesBossSingleTargetPatterns => true;
+        public bool ExecutionKillsBossOnExtremeChance => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -161,14 +162,20 @@ namespace PeanutWarrior.Prototype
             int itemId = equipmentCatalog.GetEquippedItem(true);
             ElementEquipmentCatalogPrototype.BossModeProfile profile =
                 equipmentCatalog.GetBossModeProfile(itemId);
-            float legacyRatio = GetLegacyBonusRatio(true);
-            float totalDamage = ReadAttackDamage() * (profile.TotalDamageRatio + legacyRatio) * triggerScale;
 
             bool executionTriggered = profile.Style == ElementEquipmentCatalogPrototype.BossAttackStyle.Execution &&
-                                      GetEnemyHealthRatio(boss) <= profile.ExecuteThreshold;
+                                      profile.ExecuteChance > 0f &&
+                                      UnityEngine.Random.value < profile.ExecuteChance;
             if (executionTriggered)
-                totalDamage += ReadAttackDamage() * profile.ExecuteBonusRatio * triggerScale;
+            {
+                float remainingHp = GetEnemyCurrentHp(boss);
+                DealBonusDamage(boss, Mathf.Max(1f, remainingHp + 1f));
+                lastMessage = $"{source} · 극저확률 처형 발동 · 보스 즉사";
+                return;
+            }
 
+            float legacyRatio = GetLegacyBonusRatio(true);
+            float totalDamage = ReadAttackDamage() * (profile.TotalDamageRatio + legacyRatio) * triggerScale;
             int requestedHits = Mathf.Max(1, profile.HitCount);
             float damagePerHit = totalDamage / requestedHits;
             int actualHits = 0;
@@ -179,8 +186,10 @@ namespace PeanutWarrior.Prototype
                 actualHits++;
             }
 
-            string execution = executionTriggered ? " · 처형 보너스" : string.Empty;
-            lastMessage = $"{source} · {profile.StyleName} · 보스 1명 {actualHits}타 집중{execution}";
+            string chanceText = profile.Style == ElementEquipmentCatalogPrototype.BossAttackStyle.Execution
+                ? $" · 처형 미발동 ({profile.ExecuteChance * 100f:0.####}%)"
+                : string.Empty;
+            lastMessage = $"{source} · {profile.StyleName} · 보스 1명 {actualHits}타 집중{chanceText}";
         }
 
         private float GetLegacyBonusRatio(bool boss)
@@ -291,16 +300,11 @@ namespace PeanutWarrior.Prototype
             return true;
         }
 
-        private static float GetEnemyHealthRatio(object enemy)
+        private static float GetEnemyCurrentHp(object enemy)
         {
             if (enemy == null) return 1f;
-            Type type = enemy.GetType();
-            FieldInfo hpField = type.GetField("Hp", PublicInstance);
-            FieldInfo maxHpField = type.GetField("MaxHp", PublicInstance);
-            if (hpField == null || maxHpField == null) return 1f;
-            float hp = Convert.ToSingle(hpField.GetValue(enemy));
-            float maxHp = Mathf.Max(1f, Convert.ToSingle(maxHpField.GetValue(enemy)));
-            return Mathf.Clamp01(hp / maxHp);
+            FieldInfo hpField = enemy.GetType().GetField("Hp", PublicInstance);
+            return hpField == null ? 1f : Mathf.Max(0f, Convert.ToSingle(hpField.GetValue(enemy)));
         }
 
         private static bool ContainsReference(IList list, object target)

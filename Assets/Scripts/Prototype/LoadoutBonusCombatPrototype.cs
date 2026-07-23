@@ -29,9 +29,11 @@ namespace PeanutWarrior.Prototype
 
         private float previousAttackCooldown;
         private readonly float[] previousSkillCooldowns = new float[8];
-        private string lastMessage = "장비 전투 연결 준비";
+        private string lastMessage = "장비 전투 모드 연결 준비";
 
         public string LastMessage => lastMessage;
+        public bool UsesHuntingMultiTargetPatterns => true;
+        public bool UsesBossSingleTargetPatterns => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -48,7 +50,7 @@ namespace PeanutWarrior.Prototype
             stageFlow = FindFirstObjectByType<StageFlowController>();
             swords = FindFirstObjectByType<SwordProgressionPrototype>();
             equipmentCatalog = FindFirstObjectByType<ElementEquipmentCatalogPrototype>();
-            if (arena == null || stageFlow == null)
+            if (arena == null || stageFlow == null || equipmentCatalog == null)
             {
                 enabled = false;
                 return;
@@ -72,7 +74,7 @@ namespace PeanutWarrior.Prototype
 
         private void Update()
         {
-            if (arena == null || stageFlow == null) return;
+            if (arena == null || stageFlow == null || equipmentCatalog == null) return;
             DetectBasicAttack();
             DetectAutomaticSkills();
         }
@@ -84,15 +86,10 @@ namespace PeanutWarrior.Prototype
             previousAttackCooldown = current;
             if (!attackStarted) return;
 
-            float bonusRatio = CurrentBonusRatio();
-            if (bonusRatio <= 0.0001f) return;
-
-            object target = FindClosestEnemy(GetEnemies(), GetPlayerPosition());
-            if (target == null) return;
-
-            float bonusDamage = ReadAttackDamage() * bonusRatio;
-            DealBonusDamage(target, bonusDamage);
-            lastMessage = $"장비 기본 공격 보너스 +{Mathf.CeilToInt(bonusDamage)}";
+            if (stageFlow.Phase == StageFlowPhase.BossBattle)
+                ApplyBossPattern(1f, "기본 공격");
+            else
+                ApplyHuntingPattern(1f, "기본 공격");
         }
 
         private void DetectAutomaticSkills()
@@ -106,67 +103,96 @@ namespace PeanutWarrior.Prototype
                 bool castStarted = i >= activeStart && i < activeStart + 4 &&
                                    cooldowns[i] > previousSkillCooldowns[i] + 1f;
                 previousSkillCooldowns[i] = cooldowns[i];
-                if (castStarted) ApplySkillBonus(i);
+                if (!castStarted) continue;
+
+                int local = i % 4;
+                float skillScale = 1.10f + local * 0.22f;
+                if (stageFlow.Phase == StageFlowPhase.BossBattle)
+                    ApplyBossPattern(skillScale, $"보스 스킬 {local + 1}");
+                else
+                    ApplyHuntingPattern(skillScale, $"사냥 스킬 {local + 1}");
             }
         }
 
-        private void ApplySkillBonus(int skillIndex)
+        private void ApplyHuntingPattern(float triggerScale, string source)
         {
-            float bonusRatio = CurrentBonusRatio();
-            if (bonusRatio <= 0.0001f) return;
-
             IList enemies = GetEnemies();
             if (enemies == null || enemies.Count == 0) return;
 
-            int localIndex = skillIndex % 4;
-            int maximumTargets = localIndex switch
-            {
-                0 => 5,
-                1 => 3,
-                2 => 4,
-                _ => 12
-            };
-            float radius = localIndex switch
-            {
-                0 => 150f,
-                1 => 260f,
-                2 => 220f,
-                _ => float.MaxValue
-            };
+            int itemId = equipmentCatalog.GetEquippedItem(false);
+            ElementEquipmentCatalogPrototype.HuntingModeProfile profile =
+                equipmentCatalog.GetHuntingModeProfile(itemId);
+            Vector2 playerPosition = GetPlayerPosition();
+            object primary = FindClosestEnemy(enemies, playerPosition);
+            if (primary == null || !TryGetEnemyPosition(primary, out Vector2 primaryPosition)) return;
 
-            Vector2 origin = GetPlayerPosition();
-            List<object> targets = GetNearestEnemies(enemies, origin, maximumTargets, radius);
+            Vector2 center = profile.Style == ElementEquipmentCatalogPrototype.HuntingAttackStyle.Cleave
+                ? playerPosition
+                : primaryPosition;
+            List<object> targets = GetNearestEnemies(
+                enemies, center, profile.MaxTargets, profile.Radius, bossOnly: false);
             if (targets.Count == 0) return;
 
-            float skillFactor = 1.15f + localIndex * 0.30f;
-            float totalBonusDamage = ReadAttackDamage() * skillFactor * bonusRatio;
-            float damagePerTarget = totalBonusDamage / Mathf.Max(1, targets.Count);
-            int hitCount = 0;
+            float legacyRatio = GetLegacyBonusRatio(false);
+            float baseDamage = ReadAttackDamage() * (profile.DamageRatio + legacyRatio) * triggerScale;
+            int hitTargets = 0;
             for (int i = 0; i < targets.Count; i++)
             {
-                if (!ContainsReference(GetEnemies(), targets[i])) continue;
-                DealBonusDamage(targets[i], damagePerTarget);
-                hitCount++;
+                object target = targets[i];
+                if (!ContainsReference(GetEnemies(), target)) continue;
+                float damage = baseDamage;
+                if (profile.Style == ElementEquipmentCatalogPrototype.HuntingAttackStyle.Chain)
+                    damage *= Mathf.Pow(profile.ChainFalloff, i);
+                DealBonusDamage(target, damage);
+                hitTargets++;
             }
 
-            lastMessage = $"장비 스킬 보너스 · {hitCount}대상 +{Mathf.CeilToInt(totalBonusDamage)}";
+            lastMessage = $"{source} · {profile.StyleName} · {hitTargets}마리 범위 공격";
         }
 
-        private float CurrentBonusRatio()
+        private void ApplyBossPattern(float triggerScale, string source)
         {
-            bool boss = stageFlow.Phase == StageFlowPhase.BossBattle;
-            float catalogMultiplier = equipmentCatalog != null
-                ? equipmentCatalog.GetActiveDamageMultiplier(boss)
-                : 1f;
-            int element = GetActiveElementIndex();
-            float legacyMultiplier = swords != null ? swords.GetDamageMultiplier(element) : 1f;
-            float combined = 1f + Mathf.Max(0f, catalogMultiplier - 1f) + Mathf.Max(0f, legacyMultiplier - 1f) * 0.35f;
-            return Mathf.Max(0f, combined - 1f);
+            IList enemies = GetEnemies();
+            if (enemies == null || enemies.Count == 0) return;
+
+            object boss = FindBoss(enemies) ?? FindClosestEnemy(enemies, GetPlayerPosition());
+            if (boss == null) return;
+
+            int itemId = equipmentCatalog.GetEquippedItem(true);
+            ElementEquipmentCatalogPrototype.BossModeProfile profile =
+                equipmentCatalog.GetBossModeProfile(itemId);
+            float legacyRatio = GetLegacyBonusRatio(true);
+            float totalDamage = ReadAttackDamage() * (profile.TotalDamageRatio + legacyRatio) * triggerScale;
+
+            bool executionTriggered = profile.Style == ElementEquipmentCatalogPrototype.BossAttackStyle.Execution &&
+                                      GetEnemyHealthRatio(boss) <= profile.ExecuteThreshold;
+            if (executionTriggered)
+                totalDamage += ReadAttackDamage() * profile.ExecuteBonusRatio * triggerScale;
+
+            int requestedHits = Mathf.Max(1, profile.HitCount);
+            float damagePerHit = totalDamage / requestedHits;
+            int actualHits = 0;
+            for (int hit = 0; hit < requestedHits; hit++)
+            {
+                if (!ContainsReference(GetEnemies(), boss)) break;
+                DealBonusDamage(boss, damagePerHit);
+                actualHits++;
+            }
+
+            string execution = executionTriggered ? " · 처형 보너스" : string.Empty;
+            lastMessage = $"{source} · {profile.StyleName} · 보스 1명 {actualHits}타 집중{execution}";
         }
 
-        private int GetActiveElementIndex()
+        private float GetLegacyBonusRatio(bool boss)
         {
-            FieldInfo field = stageFlow.Phase == StageFlowPhase.BossBattle ? bossElementField : huntingElementField;
+            if (swords == null) return 0f;
+            int element = GetActiveElementIndex(boss);
+            return Mathf.Max(0f, swords.GetDamageMultiplier(element) - 1f) * 0.35f;
+        }
+
+        private int GetActiveElementIndex(bool boss)
+        {
+            FieldInfo field = boss ? bossElementField : huntingElementField;
             if (field == null) return 0;
             return Mathf.Clamp(Convert.ToInt32(field.GetValue(arena)), 0, 3);
         }
@@ -219,14 +245,31 @@ namespace PeanutWarrior.Prototype
             return closest;
         }
 
-        private static List<object> GetNearestEnemies(IList enemies, Vector2 origin, int maximum, float radius)
+        private static object FindBoss(IList enemies)
         {
-            var candidates = new List<(object enemy, float distance)>();
-            float radiusSquared = radius == float.MaxValue ? float.MaxValue : radius * radius;
+            if (enemies == null) return null;
             for (int i = 0; i < enemies.Count; i++)
             {
                 object enemy = enemies[i];
-                if (!TryGetEnemyPosition(enemy, out Vector2 position)) continue;
+                if (enemy == null) continue;
+                FieldInfo bossField = enemy.GetType().GetField("IsBoss", PublicInstance);
+                if (bossField != null && Convert.ToBoolean(bossField.GetValue(enemy))) return enemy;
+            }
+            return null;
+        }
+
+        private static List<object> GetNearestEnemies(
+            IList enemies, Vector2 origin, int maximum, float radius, bool bossOnly)
+        {
+            var candidates = new List<(object enemy, float distance)>();
+            float radiusSquared = radius >= float.MaxValue ? float.MaxValue : radius * radius;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                object enemy = enemies[i];
+                if (enemy == null || !TryGetEnemyPosition(enemy, out Vector2 position)) continue;
+                FieldInfo bossField = enemy.GetType().GetField("IsBoss", PublicInstance);
+                bool isBoss = bossField != null && Convert.ToBoolean(bossField.GetValue(enemy));
+                if (bossOnly != isBoss) continue;
                 float distance = Vector2.SqrMagnitude(position - origin);
                 if (distance > radiusSquared) continue;
                 candidates.Add((enemy, distance));
@@ -246,6 +289,18 @@ namespace PeanutWarrior.Prototype
             if (field == null) return false;
             position = (Vector2)field.GetValue(enemy);
             return true;
+        }
+
+        private static float GetEnemyHealthRatio(object enemy)
+        {
+            if (enemy == null) return 1f;
+            Type type = enemy.GetType();
+            FieldInfo hpField = type.GetField("Hp", PublicInstance);
+            FieldInfo maxHpField = type.GetField("MaxHp", PublicInstance);
+            if (hpField == null || maxHpField == null) return 1f;
+            float hp = Convert.ToSingle(hpField.GetValue(enemy));
+            float maxHp = Mathf.Max(1f, Convert.ToSingle(maxHpField.GetValue(enemy)));
+            return Mathf.Clamp01(hp / maxHp);
         }
 
         private static bool ContainsReference(IList list, object target)

@@ -7,11 +7,6 @@ using UnityEngine;
 
 namespace PeanutWarrior.Prototype
 {
-    /// <summary>
-    /// Applies the bonus portion of the equipped sword's rarity, level and collection
-    /// progress to basic attacks and automatic skills without replacing the authoritative
-    /// combat loop in CombatPrototypeArena.
-    /// </summary>
     [DefaultExecutionOrder(16000)]
     public sealed class LoadoutBonusCombatPrototype : MonoBehaviour
     {
@@ -21,6 +16,7 @@ namespace PeanutWarrior.Prototype
         private CombatPrototypeArena arena;
         private StageFlowController stageFlow;
         private SwordProgressionPrototype swords;
+        private ElementEquipmentCatalogPrototype equipmentCatalog;
 
         private FieldInfo enemiesField;
         private FieldInfo playerPositionField;
@@ -33,7 +29,7 @@ namespace PeanutWarrior.Prototype
 
         private float previousAttackCooldown;
         private readonly float[] previousSkillCooldowns = new float[8];
-        private string lastMessage = "검 장비 전투 연결 준비";
+        private string lastMessage = "장비 전투 연결 준비";
 
         public string LastMessage => lastMessage;
 
@@ -51,6 +47,7 @@ namespace PeanutWarrior.Prototype
             arena = FindFirstObjectByType<CombatPrototypeArena>();
             stageFlow = FindFirstObjectByType<StageFlowController>();
             swords = FindFirstObjectByType<SwordProgressionPrototype>();
+            equipmentCatalog = FindFirstObjectByType<ElementEquipmentCatalogPrototype>();
             if (arena == null || stageFlow == null)
             {
                 enabled = false;
@@ -95,7 +92,7 @@ namespace PeanutWarrior.Prototype
 
             float bonusDamage = ReadAttackDamage() * bonusRatio;
             DealBonusDamage(target, bonusDamage);
-            lastMessage = $"검 기본 공격 보너스 +{Mathf.CeilToInt(bonusDamage)}";
+            lastMessage = $"장비 기본 공격 보너스 +{Mathf.CeilToInt(bonusDamage)}";
         }
 
         private void DetectAutomaticSkills()
@@ -152,14 +149,19 @@ namespace PeanutWarrior.Prototype
                 hitCount++;
             }
 
-            lastMessage = $"검술 장비 보너스 · {hitCount}대상 +{Mathf.CeilToInt(totalBonusDamage)}";
+            lastMessage = $"장비 스킬 보너스 · {hitCount}대상 +{Mathf.CeilToInt(totalBonusDamage)}";
         }
 
         private float CurrentBonusRatio()
         {
+            bool boss = stageFlow.Phase == StageFlowPhase.BossBattle;
+            float catalogMultiplier = equipmentCatalog != null
+                ? equipmentCatalog.GetActiveDamageMultiplier(boss)
+                : 1f;
             int element = GetActiveElementIndex();
-            float swordMultiplier = swords != null ? swords.GetDamageMultiplier(element) : 1f;
-            return Mathf.Max(0f, swordMultiplier - 1f);
+            float legacyMultiplier = swords != null ? swords.GetDamageMultiplier(element) : 1f;
+            float combined = 1f + Mathf.Max(0f, catalogMultiplier - 1f) + Mathf.Max(0f, legacyMultiplier - 1f) * 0.35f;
+            return Mathf.Max(0f, combined - 1f);
         }
 
         private int GetActiveElementIndex()

@@ -5,11 +5,11 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Assigns exactly one menu layout component to each page. Older layout layers are
-    /// kept for the pages they still own, but they never run against the same page in
-    /// the same frame, which removes the repeated destroy/rebuild flicker.
+    /// Assigns exactly one menu renderer to each page before the layered menu scripts
+    /// get a chance to rebuild the same content. This is the single authority for
+    /// enabling V2/V3/V4/V5/V6 menu components.
     /// </summary>
-    [DefaultExecutionOrder(27000)]
+    [DefaultExecutionOrder(24000)]
     public sealed class MenuLayoutCoordinatorV6 : MonoBehaviour
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -38,44 +38,60 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            // Let every layout finish its own Start binding and asset creation first.
-            for (int i = 0; i < 24; i++) yield return null;
+            // RuntimeInitializeOnLoadMethod has already created the layout objects.
+            // Bind before their later execution-order Start methods can build pages.
+            for (int i = 0; i < 12; i++)
+            {
+                BindObjects();
+                if (sourceUi != null && currentPageField != null) break;
+                yield return null;
+            }
 
-            sourceUi = FindFirstObjectByType<PeanutMobileCanvasPrototype>();
-            layoutV2 = FindFirstObjectByType<PeanutMenuLayoutV2>();
-            layoutV3 = FindFirstObjectByType<PeanutCoreMenuCompletionV3>();
-            layoutV4 = FindFirstObjectByType<PeanutMenuLayoutV4>();
-            layoutV5 = FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();
-            skillV6 = FindFirstObjectByType<PeanutSkillMenuV6>();
-            if (sourceUi == null)
+            if (sourceUi == null || currentPageField == null)
             {
                 enabled = false;
                 yield break;
             }
 
-            currentPageField = typeof(PeanutMobileCanvasPrototype).GetField("currentPage", PrivateInstance);
-            coordinated = currentPageField != null;
+            coordinated = true;
             ApplyOwnership(true);
+        }
+
+        private void BindObjects()
+        {
+            sourceUi = sourceUi != null ? sourceUi : FindFirstObjectByType<PeanutMobileCanvasPrototype>();
+            layoutV2 = layoutV2 != null ? layoutV2 : FindFirstObjectByType<PeanutMenuLayoutV2>();
+            layoutV3 = layoutV3 != null ? layoutV3 : FindFirstObjectByType<PeanutCoreMenuCompletionV3>();
+            layoutV4 = layoutV4 != null ? layoutV4 : FindFirstObjectByType<PeanutMenuLayoutV4>();
+            layoutV5 = layoutV5 != null ? layoutV5 : FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();
+            skillV6 = skillV6 != null ? skillV6 : FindFirstObjectByType<PeanutSkillMenuV6>();
+            if (sourceUi != null && currentPageField == null)
+                currentPageField = typeof(PeanutMobileCanvasPrototype).GetField("currentPage", PrivateInstance);
+        }
+
+        private void Update()
+        {
+            if (!coordinated)
+            {
+                BindObjects();
+                if (sourceUi == null || currentPageField == null) return;
+                coordinated = true;
+            }
+            ApplyOwnership(false);
         }
 
         private void LateUpdate()
         {
             if (!coordinated) return;
+            // Reassert after all menu LateUpdate methods. No older layout may re-enable
+            // another renderer during the same frame.
             ApplyOwnership(false);
         }
 
         private void ApplyOwnership(bool force)
         {
             string page = currentPageField.GetValue(sourceUi)?.ToString() ?? "Main";
-            if (!force && page == lastPage)
-            {
-                // Reassert the exact owner in case an older component changed another
-                // component's enabled state during its previous page cleanup.
-                SetOwnersForPage(page);
-                return;
-            }
-
-            lastPage = page;
+            if (force || page != lastPage) lastPage = page;
             SetOwnersForPage(page);
         }
 

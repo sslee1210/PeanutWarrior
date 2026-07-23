@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace PeanutWarrior.Prototype
 {
-    [DefaultExecutionOrder(33600)]
+    [DefaultExecutionOrder(40000)]
     public sealed class BottomNavigationOrderV4 : MonoBehaviour
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -16,9 +16,9 @@ namespace PeanutWarrior.Prototype
         private PeanutMobileCanvasPrototype ui;
         private Image[] backgrounds;
         private FieldInfo currentPageField;
-        private float refreshTimer;
 
         public string BottomMenuOrder => "성장 → 장비 → 스킬 → 펫 → 전직 → 상점";
+        public bool AppliesFinalNavigationStateEveryFrame => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -31,26 +31,38 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            for (int i = 0; i < 16; i++)
+            for (int i = 0; i < 24; i++)
             {
-                yield return null;
                 ui = FindFirstObjectByType<PeanutMobileCanvasPrototype>();
-                if (ui == null) continue;
-
-                FieldInfo backgroundsField = typeof(PeanutMobileCanvasPrototype).GetField("navBackgrounds", PrivateInstance);
-                backgrounds = backgroundsField?.GetValue(ui) as Image[];
-                currentPageField = typeof(PeanutMobileCanvasPrototype).GetField("currentPage", PrivateInstance);
-                if (backgrounds != null && backgrounds.Length >= 6) break;
+                if (ui != null)
+                {
+                    FieldInfo backgroundsField = typeof(PeanutMobileCanvasPrototype).GetField("navBackgrounds", PrivateInstance);
+                    backgrounds = backgroundsField?.GetValue(ui) as Image[];
+                    currentPageField = typeof(PeanutMobileCanvasPrototype).GetField("currentPage", PrivateInstance);
+                    if (backgrounds != null && backgrounds.Length >= 6) break;
+                }
+                yield return null;
             }
             Apply();
         }
 
         private void LateUpdate()
         {
-            refreshTimer -= Time.unscaledDeltaTime;
-            if (refreshTimer > 0f) return;
-            refreshTimer = 0.10f;
+            if (ui == null || backgrounds == null || backgrounds.Length < 6)
+            {
+                TryRebind();
+                return;
+            }
             Apply();
+        }
+
+        private void TryRebind()
+        {
+            ui = FindFirstObjectByType<PeanutMobileCanvasPrototype>();
+            if (ui == null) return;
+            FieldInfo backgroundsField = typeof(PeanutMobileCanvasPrototype).GetField("navBackgrounds", PrivateInstance);
+            backgrounds = backgroundsField?.GetValue(ui) as Image[];
+            currentPageField = typeof(PeanutMobileCanvasPrototype).GetField("currentPage", PrivateInstance);
         }
 
         private void Apply()

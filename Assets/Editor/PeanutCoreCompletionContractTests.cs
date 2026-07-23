@@ -36,22 +36,26 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
-        public void Equipment_ChangesAttackPatternByBattleMode()
+        public void Equipment_ChangesAttackPatternAndUsesExtremeExecutionChance()
         {
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("UnifiedItemCount", PublicInstance));
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("UsesUnifiedEquipmentEntries", PublicInstance));
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("ShowsDualBattleEffects", PublicInstance));
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("ChangesAttackPatternByBattleMode", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetProperty("ExecutionUsesExtremeRandomInstantKill", PublicInstance));
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetUnifiedItemId", PublicInstance));
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetHuntingModeProfile", PublicInstance));
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetBossModeProfile", PublicInstance));
+            Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetExecutionChance", PublicInstance));
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetHuntingEffectDescription", PublicInstance));
             Assert.NotNull(typeof(ElementEquipmentCatalogPrototype).GetMethod("GetBossEffectDescription", PublicInstance));
 
             Assert.NotNull(typeof(LoadoutBonusCombatPrototype).GetProperty("UsesHuntingMultiTargetPatterns", PublicInstance));
             Assert.NotNull(typeof(LoadoutBonusCombatPrototype).GetProperty("UsesBossSingleTargetPatterns", PublicInstance));
+            Assert.NotNull(typeof(LoadoutBonusCombatPrototype).GetProperty("ExecutionKillsBossOnExtremeChance", PublicInstance));
             Assert.NotNull(typeof(LoadoutBonusCombatPrototype).GetMethod("ApplyHuntingPattern", PrivateInstance));
             Assert.NotNull(typeof(LoadoutBonusCombatPrototype).GetMethod("ApplyBossPattern", PrivateInstance));
+            Assert.NotNull(typeof(LoadoutBonusCombatPrototype).GetMethod("GetEnemyCurrentHp", PrivateStatic));
         }
 
         [Test]

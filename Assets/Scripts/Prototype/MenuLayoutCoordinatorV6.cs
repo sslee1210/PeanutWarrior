@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using PeanutWarrior.Core;
 using UnityEngine;
 
 namespace PeanutWarrior.Prototype

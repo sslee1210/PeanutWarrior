@@ -52,7 +52,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · hunting equipment performs multi-target area patterns, boss equipment focuses every extra hit on one boss, skill details use live combat values, and menus use one renderer.");
+                    "PASS · hunting equipment performs multi-target patterns, boss equipment focuses on one boss, and execution uses an extremely rare instant-kill roll capped at 0.001%.");
                 yield break;
             }
 
@@ -162,15 +162,27 @@ namespace PeanutWarrior.Prototype
                 if (!catalog.ShowsDualBattleEffects) errors.Add("Each equipment entry must expose hunting and boss effects.");
                 if (!catalog.ChangesAttackPatternByBattleMode)
                     errors.Add("Equipment must change its attack pattern between hunting and boss modes.");
+                if (!catalog.ExecutionUsesExtremeRandomInstantKill)
+                    errors.Add("Execution must use an extremely rare random instant-kill roll.");
                 if (catalog.UsesSeparateHuntingAndBossCatalogs)
                     errors.Add("Hunting and boss catalogs must not remain separate.");
 
                 int starter = catalog.GetUnifiedItemId(0, 1, 0);
                 ElementEquipmentCatalogPrototype.HuntingModeProfile hunting = catalog.GetHuntingModeProfile(starter);
-                ElementEquipmentCatalogPrototype.BossModeProfile boss = catalog.GetBossModeProfile(starter);
                 if (hunting.MaxTargets < 2) errors.Add("Hunting equipment must attack multiple enemies.");
                 if (hunting.Radius <= 0f) errors.Add("Hunting equipment must define an attack radius.");
-                if (boss.HitCount < 1) errors.Add("Boss equipment must define focused single-target hits.");
+
+                for (int rarity = 1; rarity <= 4; rarity++)
+                {
+                    int executionId = catalog.GetUnifiedItemId(0, rarity, 2);
+                    ElementEquipmentCatalogPrototype.BossModeProfile execution = catalog.GetBossModeProfile(executionId);
+                    if (execution.Style != ElementEquipmentCatalogPrototype.BossAttackStyle.Execution)
+                        errors.Add("Third equipment variant must use execution style.");
+                    if (execution.ExecuteChance <= 0f)
+                        errors.Add("Execution chance must be greater than zero.");
+                    if (execution.ExecuteChance > 0.00001f)
+                        errors.Add("Execution chance must never exceed 0.001%.");
+                }
             }
 
             LoadoutBonusCombatPrototype combat = FindFirstObjectByType<LoadoutBonusCombatPrototype>();
@@ -180,6 +192,8 @@ namespace PeanutWarrior.Prototype
                     errors.Add("Equipment combat must apply hunting multi-target patterns.");
                 if (!combat.UsesBossSingleTargetPatterns)
                     errors.Add("Equipment combat must apply boss single-target patterns.");
+                if (!combat.ExecutionKillsBossOnExtremeChance)
+                    errors.Add("Execution success must remove the boss's remaining HP.");
             }
 
             PeanutEquipmentAndShopMenuV5 menu = FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();

@@ -8,9 +8,8 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Sole authority for menu rendering. V2-V6 are used only as page builder
-    /// libraries: their Update/LateUpdate loops stay disabled permanently so they can
-    /// never delete and recreate the same Content hierarchy on alternating frames.
+    /// Sole authority for menu rendering. Legacy layout loops stay disabled so one
+    /// page can never be deleted and recreated by multiple renderers in the same frame.
     /// </summary>
     [DefaultExecutionOrder(24000)]
     public sealed class MenuLayoutCoordinatorV6 : MonoBehaviour
@@ -23,6 +22,7 @@ namespace PeanutWarrior.Prototype
         private PeanutMenuLayoutV4 layoutV4;
         private PeanutEquipmentAndShopMenuV5 layoutV5;
         private PeanutSkillMenuV6 skillV6;
+        private PeanutEquipmentDetailMenuV7 equipmentV7;
 
         private FieldInfo currentPageField;
         private FieldInfo contentHostField;
@@ -90,10 +90,6 @@ namespace PeanutWarrior.Prototype
         {
             if (!ready) return;
             DisableAllLayoutLoops();
-
-            // A source button can rebuild its legacy page during the same Update.
-            // Checking again in LateUpdate guarantees the final hierarchy rendered by
-            // Unity belongs to exactly one builder.
             RenderIfRequired(false);
         }
 
@@ -105,6 +101,7 @@ namespace PeanutWarrior.Prototype
             layoutV4 = layoutV4 != null ? layoutV4 : FindFirstObjectByType<PeanutMenuLayoutV4>();
             layoutV5 = layoutV5 != null ? layoutV5 : FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();
             skillV6 = skillV6 != null ? skillV6 : FindFirstObjectByType<PeanutSkillMenuV6>();
+            equipmentV7 = equipmentV7 != null ? equipmentV7 : FindFirstObjectByType<PeanutEquipmentDetailMenuV7>();
         }
 
         private bool TryBindSource()
@@ -124,6 +121,7 @@ namespace PeanutWarrior.Prototype
             bool v4 = InitializeBuilder(layoutV4, "Bind", "CreateAssets");
             bool v5 = InitializeBuilder(layoutV5, "Bind", "CreateAssets");
             bool v6 = InitializeBuilder(skillV6, "Bind", "CreateAssets");
+            bool v7 = InitializeBuilder(equipmentV7, "Bind", "CreateAssets");
 
             if (v2)
             {
@@ -131,7 +129,7 @@ namespace PeanutWarrior.Prototype
                 FieldInfo stageMapWorld = typeof(PeanutMenuLayoutV2).GetField("stageMapWorld", PrivateInstance);
                 if (flow != null && stageMapWorld != null) stageMapWorld.SetValue(layoutV2, flow.World);
             }
-            return v2 && v3 && v4 && v5 && v6;
+            return v2 && v3 && v4 && v5 && v6 && v7;
         }
 
         private bool InitializeBuilder(MonoBehaviour builder, string bindMethodName, string assetMethodName)
@@ -160,6 +158,7 @@ namespace PeanutWarrior.Prototype
             Disable(layoutV4);
             Disable(layoutV5);
             Disable(skillV6);
+            Disable(equipmentV7);
         }
 
         private static void Disable(MonoBehaviour layout)
@@ -249,6 +248,12 @@ namespace PeanutWarrior.Prototype
                     owner = "MenuV4";
                     break;
                 case "Equipment":
+                    renderer = equipmentV7;
+                    rootName = "Peanut Equipment Detail V7";
+                    buildMethod = "BuildPage";
+                    arguments = Array.Empty<object>();
+                    owner = "EquipmentDetailV7";
+                    break;
                 case "Shop":
                     renderer = layoutV5;
                     rootName = "Peanut Equipment Shop V5";
@@ -269,8 +274,7 @@ namespace PeanutWarrior.Prototype
         private static void InvokeBuilder(object renderer, string methodName, object[] arguments)
         {
             MethodInfo method = renderer.GetType().GetMethod(methodName, PrivateInstance);
-            if (method == null)
-                throw new MissingMethodException(renderer.GetType().Name, methodName);
+            if (method == null) throw new MissingMethodException(renderer.GetType().Name, methodName);
             method.Invoke(renderer, arguments);
         }
 

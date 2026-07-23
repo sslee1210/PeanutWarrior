@@ -1,12 +1,13 @@
 using System;
 using System.Reflection;
+using PeanutWarrior.Core;
 using UnityEngine;
 
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
     /// Stores the eight confirmed peanut sword arts and exposes their live combat values.
-    /// Hunting and boss skills use separate names, timings, hit structures, and roles.
+    /// Skill level upgrades and the eight advancement tiers are separate, cumulative systems.
     /// </summary>
     public sealed class SkillManagementPrototype : MonoBehaviour
     {
@@ -31,7 +32,7 @@ namespace PeanutWarrior.Prototype
             "알맹이에 담긴 황금 생명핵을 천상검으로 바꿉니다. 전장의 빛을 모아 단 한 번 내려쳐 하늘과 지면을 함께 가릅니다."
         };
 
-        private static readonly float[] MpCosts = { 20f, 25f, 30f, 42f, 22f, 30f, 38f, 55f };
+        private static readonly float[] BaseMpCosts = { 20f, 25f, 30f, 42f, 22f, 30f, 38f, 55f };
         private static readonly float[] BaseCooldownSeconds = { 6f, 9f, 12f, 18f, 10f, 13f, 17f, 24f };
         private static readonly int[] BaseHitCounts = { 6, 12, 7, 16, 6, 9, 8, 1 };
         private static readonly float[] BaseDamageMultipliers = { 2.8f, 4.6f, 5.4f, 8.8f, 3.6f, 7.2f, 6.8f, 14.5f };
@@ -55,6 +56,11 @@ namespace PeanutWarrior.Prototype
         public int ConfirmedSkillCount => SkillNames.Length;
         public bool UsesDistinctSkillTimings => true;
         public bool UsesSpectacularPeanutSwordArts => true;
+        public bool UsesAdvancementSkillEvolution => true;
+        public int CurrentAdvancementTier => advancementTierField == null || arena == null
+            ? 0
+            : Mathf.Clamp(Convert.ToInt32(advancementTierField.GetValue(arena)), 0, PeanutGameRules.AdvancementCount - 1);
+        public string CurrentAdvancementName => PeanutGameRules.GetAdvancement(CurrentAdvancementTier).Name;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -115,21 +121,57 @@ namespace PeanutWarrior.Prototype
 
         public float GetSkillMpCost(int index)
         {
-            return IsValidSkill(index) ? MpCosts[index] : 0f;
+            if (!IsValidSkill(index)) return 0f;
+            float reduction = GetSkillAdvancementMpReduction(index);
+            return Mathf.Max(1f, Mathf.Round(BaseMpCosts[index] * (1f - reduction)));
         }
 
         public float GetSkillBaseCooldown(int index)
         {
-            return IsValidSkill(index) ? BaseCooldownSeconds[index] : 0f;
+            if (!IsValidSkill(index)) return 0f;
+            float reduction = GetSkillAdvancementCooldownReduction(index);
+            return Mathf.Max(1f, BaseCooldownSeconds[index] * (1f - reduction));
         }
 
         public int GetSkillHitCount(int index)
         {
             if (!IsValidSkill(index)) return 1;
-            int tier = advancementTierField == null || arena == null
-                ? 0
-                : Mathf.Max(0, Convert.ToInt32(advancementTierField.GetValue(arena)));
-            return BaseHitCounts[index] + (index == 0 || index == 5 ? tier : 0);
+            int tier = CurrentAdvancementTier;
+            if (index == 5) return BaseHitCounts[index] + tier;
+            return BaseHitCounts[index];
+        }
+
+        public float GetSkillAdvancementDamageBonus(int index)
+        {
+            if (!IsValidSkill(index)) return 0f;
+            int tier = CurrentAdvancementTier;
+            float perTier = 0.07f + (index % 4) * 0.01f;
+            float bonus = tier * perTier;
+            if (tier >= 3 && !IsBossSkill(index)) bonus += 0.08f;
+            if (tier >= 4 && IsBossSkill(index)) bonus += 0.10f;
+            if (tier >= 6 && (index == 3 || index == 7)) bonus += 0.20f;
+            if (tier >= 7) bonus += 0.15f;
+            return bonus;
+        }
+
+        public float GetSkillAdvancementCooldownReduction(int index)
+        {
+            if (!IsValidSkill(index)) return 0f;
+            int tier = CurrentAdvancementTier;
+            float reduction = tier * 0.02f;
+            if (tier >= 3) reduction += 0.02f;
+            if (tier >= 6) reduction += 0.03f;
+            return Mathf.Clamp(reduction, 0f, 0.22f);
+        }
+
+        public float GetSkillAdvancementMpReduction(int index)
+        {
+            if (!IsValidSkill(index)) return 0f;
+            int tier = CurrentAdvancementTier;
+            float reduction = tier * 0.01f;
+            if (tier >= 5) reduction += 0.02f;
+            if (tier >= 7) reduction += 0.02f;
+            return Mathf.Clamp(reduction, 0f, 0.12f);
         }
 
         public float GetSkillDamageMultiplier(int index)
@@ -140,7 +182,8 @@ namespace PeanutWarrior.Prototype
                 : Convert.ToSingle(skillAdvancementMultiplierProperty.GetValue(arena));
             return BaseDamageMultipliers[index] *
                    (1f + (GetSkillLevel(index) - 1) * 0.15f) *
-                   advancementMultiplier;
+                   advancementMultiplier *
+                   (1f + GetSkillAdvancementDamageBonus(index));
         }
 
         public float GetSkillTotalDamage(int index)
@@ -156,10 +199,19 @@ namespace PeanutWarrior.Prototype
             return GetSkillTotalDamage(index) / Mathf.Max(1, GetSkillHitCount(index));
         }
 
+        public string GetSkillAdvancementSummary(int index)
+        {
+            if (!IsValidSkill(index)) return "전직 강화 정보 없음";
+            return $"전직 {CurrentAdvancementTier}단계 · 피해 +{GetSkillAdvancementDamageBonus(index) * 100f:0}% · " +
+                   $"쿨타임 -{GetSkillAdvancementCooldownReduction(index) * 100f:0}% · " +
+                   $"MP -{GetSkillAdvancementMpReduction(index) * 100f:0}%";
+        }
+
         public string GetSkillCombatSummary(int index)
         {
             return $"총 피해 {GetSkillTotalDamage(index):N0} · {GetSkillHitCount(index)}타\n" +
-                   $"타격당 {GetSkillDamagePerHit(index):N0} · 쿨타임 {GetSkillBaseCooldown(index):0.0}초 · MP {GetSkillMpCost(index):N0}";
+                   $"타격당 {GetSkillDamagePerHit(index):N0} · 쿨타임 {GetSkillBaseCooldown(index):0.0}초 · MP {GetSkillMpCost(index):N0}\n" +
+                   GetSkillAdvancementSummary(index);
         }
 
         public string GetSkillRole(int index)

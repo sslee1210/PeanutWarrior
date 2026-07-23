@@ -36,7 +36,6 @@ namespace PeanutWarrior.Prototype
         private Sprite roundedSprite;
         private GameObject root;
         private string activePage = string.Empty;
-        private bool bossCatalog;
         private int elementTab;
         private float refreshTimer;
         private readonly List<Action> refreshers = new List<Action>();
@@ -51,7 +50,6 @@ namespace PeanutWarrior.Prototype
         private readonly Color red = new Color(0.82f, 0.20f, 0.15f, 1f);
         private readonly Color blue = new Color(0.18f, 0.48f, 0.82f, 1f);
         private readonly Color muted = new Color(0.52f, 0.55f, 0.48f, 1f);
-        private readonly Color line = new Color(0.56f, 0.66f, 0.52f, 0.48f);
 
         private static readonly string[] ElementNames = { "무속성", "화염", "냉기", "번개" };
         private static readonly Color[] ElementColors =
@@ -62,10 +60,11 @@ namespace PeanutWarrior.Prototype
             new Color(0.54f, 0.31f, 0.84f)
         };
 
-        public int EquipmentCatalogCount => 2;
+        public int EquipmentCatalogCount => 1;
         public int ElementsPerCatalog => 4;
-        public int ItemsPerCatalog => equipment == null ? 48 : equipment.ItemCountPerUse;
-        public bool UsesSeparateHuntingAndBossTabs => true;
+        public int ItemsPerCatalog => equipment == null ? 48 : equipment.UnifiedItemCount;
+        public bool UsesSeparateHuntingAndBossTabs => false;
+        public bool UsesUnifiedDualEffectCards => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -154,21 +153,10 @@ namespace PeanutWarrior.Prototype
                 return;
             }
 
-            if (activePage == "Equipment" || activePage == "Shop")
-            {
-                activePage = page;
-                if (layoutV4 != null) layoutV4.enabled = true;
-            }
+            if (activePage == "Equipment" || activePage == "Shop") activePage = page;
         }
 
-        private string CurrentPage
-        {
-            get
-            {
-                object value = currentPageField?.GetValue(sourceUi);
-                return value == null ? "Main" : value.ToString();
-            }
-        }
+        private string CurrentPage => currentPageField?.GetValue(sourceUi)?.ToString() ?? "Main";
 
         private void BuildPage(string page)
         {
@@ -195,49 +183,40 @@ namespace PeanutWarrior.Prototype
 
         private void BuildEquipment()
         {
-            Label(root.transform, "검 장비 도감", 20f, 7f, 260f, 44f, 22, darkGreen, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Text material = Label(root.transform, string.Empty, 1000f, 7f, 368f, 44f, 15, darkGreen, TextAnchor.MiddleRight, FontStyle.Bold);
+            Label(root.transform, "검 장비 도감", 20f, 6f, 260f, 40f, 22, darkGreen, TextAnchor.MiddleLeft, FontStyle.Bold);
+            Text material = Label(root.transform, string.Empty, 1000f, 6f, 368f, 40f, 15, darkGreen, TextAnchor.MiddleRight, FontStyle.Bold);
             refreshers.Add(() => material.text = $"장비 강화 재료 {(growth == null ? 0 : growth.EquipmentEnhancementMaterials):N0}");
 
-            FlatButton(root.transform, "사냥용 검", 20f, 52f, 662f, 50f,
-                bossCatalog ? cream : green, bossCatalog ? darkGreen : Color.white,
-                () => { bossCatalog = false; BuildPage("Equipment"); });
-            FlatButton(root.transform, "보스용 검", 706f, 52f, 662f, 50f,
-                bossCatalog ? red : cream, bossCatalog ? Color.white : darkGreen,
-                () => { bossCatalog = true; BuildPage("Equipment"); });
+            Text equipped = Label(root.transform, string.Empty, 20f, 44f, 1020f, 42f, 14, brown, TextAnchor.MiddleLeft, FontStyle.Bold);
+            Button summon = FlatButton(root.transform, "검 소환 · 5 다이아", 1080f, 46f, 288f, 38f, gold, Color.white, SummonSword);
+            refreshers.Add(() =>
+            {
+                equipped.text = $"사냥 장착 · {EquippedName(false)}     |     보스 장착 · {EquippedName(true)}";
+                summon.interactable = shop != null;
+            });
 
             for (int i = 0; i < ElementNames.Length; i++)
             {
                 int captured = i;
-                FlatButton(root.transform, ElementNames[i], 20f + i * 337f, 112f, 324f, 48f,
+                FlatButton(root.transform, ElementNames[i], 20f + i * 337f, 92f, 324f, 46f,
                     elementTab == i ? ElementColors[i] : cream,
                     elementTab == i ? Color.white : darkGreen,
                     () => { elementTab = captured; BuildPage("Equipment"); });
             }
-
-            Text equipped = Label(root.transform, string.Empty, 20f, 164f, 1020f, 34f, 14, brown, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Button summon = FlatButton(root.transform, string.Empty, 1080f, 164f, 288f, 34f,
-                bossCatalog ? red : green, Color.white, SummonCurrentCatalog);
-            Text summonText = summon.GetComponentInChildren<Text>();
-            refreshers.Add(() =>
-            {
-                equipped.text = $"{(bossCatalog ? "보스용" : "사냥용")} 현재 장착 · {EquippedName(bossCatalog)}";
-                summonText.text = $"{(bossCatalog ? "보스용" : "사냥용")} 검 소환 · 5 다이아";
-            });
 
             for (int rarity = 1; rarity <= 4; rarity++) BuildRarityRow(rarity);
         }
 
         private void BuildRarityRow(int rarity)
         {
-            float y = 204f + (rarity - 1) * 106f;
+            float y = 150f + (rarity - 1) * 116f;
             Color rarityColor = RarityColor(rarity);
             Label(root.transform, equipment == null ? "등급" : equipment.RarityName(rarity),
-                20f, y + 16f, 112f, 62f, 18, rarityColor, TextAnchor.MiddleCenter, FontStyle.Bold);
+                20f, y + 20f, 112f, 68f, 18, rarityColor, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             for (int variant = 0; variant < 3; variant++)
             {
-                int itemId = equipment == null ? -1 : equipment.GetItemId(bossCatalog, elementTab, rarity, variant);
+                int itemId = equipment == null ? -1 : equipment.GetUnifiedItemId(elementTab, rarity, variant);
                 float x = 142f + variant * 408f;
                 BuildEquipmentItem(itemId, x, y, rarityColor);
             }
@@ -245,14 +224,17 @@ namespace PeanutWarrior.Prototype
 
         private void BuildEquipmentItem(int itemId, float x, float y, Color accent)
         {
-            GameObject item = Panel(root.transform, "Equipment " + itemId, x, y, 390f, 96f, card, accent);
-            Text name = Label(item.transform, string.Empty, 12f, 4f, 224f, 28f, 15, darkGreen, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Text info = Label(item.transform, string.Empty, 12f, 31f, 224f, 56f, 12, brown, TextAnchor.UpperLeft, FontStyle.Normal);
-            Button equipButton = FlatButton(item.transform, string.Empty, 246f, 8f, 132f, 34f, cream, darkGreen,
-                () => EquipItem(itemId));
-            Button upgradeButton = FlatButton(item.transform, string.Empty, 246f, 50f, 132f, 34f, accent, Color.white,
+            GameObject item = Panel(root.transform, "Equipment " + itemId, x, y, 390f, 108f, card, accent);
+            Text name = Label(item.transform, string.Empty, 12f, 3f, 220f, 26f, 15, darkGreen, TextAnchor.MiddleLeft, FontStyle.Bold);
+            Text info = Label(item.transform, string.Empty, 12f, 28f, 222f, 76f, 11, brown, TextAnchor.UpperLeft, FontStyle.Normal);
+            Button huntingButton = FlatButton(item.transform, string.Empty, 244f, 5f, 134f, 28f, cream, darkGreen,
+                () => EquipItem(itemId, false));
+            Button bossButton = FlatButton(item.transform, string.Empty, 244f, 39f, 134f, 28f, cream, darkGreen,
+                () => EquipItem(itemId, true));
+            Button upgradeButton = FlatButton(item.transform, string.Empty, 244f, 73f, 134f, 28f, accent, Color.white,
                 () => UpgradeItem(itemId));
-            Text equipText = equipButton.GetComponentInChildren<Text>();
+            Text huntingText = huntingButton.GetComponentInChildren<Text>();
+            Text bossText = bossButton.GetComponentInChildren<Text>();
             Text upgradeText = upgradeButton.GetComponentInChildren<Text>();
 
             refreshers.Add(() =>
@@ -261,23 +243,31 @@ namespace PeanutWarrior.Prototype
                 {
                     name.text = "장비 연결 대기";
                     info.text = string.Empty;
-                    equipButton.interactable = upgradeButton.interactable = false;
+                    huntingButton.interactable = bossButton.interactable = upgradeButton.interactable = false;
                     return;
                 }
 
                 ElementEquipmentCatalogPrototype.EquipmentDefinition definition = equipment.GetDefinition(itemId);
                 bool owned = equipment.IsOwned(itemId);
-                bool equippedNow = equipment.IsEquipped(itemId, bossCatalog);
+                bool huntingEquipped = equipment.IsEquipped(itemId, false);
+                bool bossEquipped = equipment.IsEquipped(itemId, true);
                 int cost = equipment.GetUpgradeCost(itemId);
                 name.text = owned ? definition.Name : "잠김 · " + definition.Name;
                 info.text = owned
-                    ? $"Lv.{equipment.GetLevel(itemId)} · 보유 {equipment.GetCopies(itemId)}\n피해 ×{equipment.GetItemDamageMultiplier(itemId):0.00}"
-                    : $"{(bossCatalog ? "보스용" : "사냥용")} 소환으로 획득";
+                    ? $"Lv.{equipment.GetLevel(itemId)} · 보유 {equipment.GetCopies(itemId)}\n" +
+                      equipment.GetHuntingEffectDescription(itemId) + "\n" +
+                      equipment.GetBossEffectDescription(itemId)
+                    : "검 소환으로 획득\n사냥 효과와 보스 효과 동시 해금";
 
-                equipButton.interactable = owned && !equippedNow;
-                equipText.text = equippedNow ? "장착 중" : "장착";
-                equipButton.GetComponent<Image>().color = equippedNow ? (bossCatalog ? red : green) : cream;
-                equipText.color = equippedNow ? Color.white : darkGreen;
+                huntingButton.interactable = owned && !huntingEquipped;
+                huntingText.text = huntingEquipped ? "사냥 장착 중" : "사냥 장착";
+                huntingButton.GetComponent<Image>().color = huntingEquipped ? green : cream;
+                huntingText.color = huntingEquipped ? Color.white : darkGreen;
+
+                bossButton.interactable = owned && !bossEquipped;
+                bossText.text = bossEquipped ? "보스 장착 중" : "보스 장착";
+                bossButton.GetComponent<Image>().color = bossEquipped ? red : cream;
+                bossText.color = bossEquipped ? Color.white : darkGreen;
 
                 upgradeButton.interactable = owned && growth != null && growth.EquipmentEnhancementMaterials >= cost;
                 upgradeText.text = owned ? $"강화 {cost}" : "잠김";
@@ -294,9 +284,7 @@ namespace PeanutWarrior.Prototype
                 resources.text = coreShop == null ? string.Empty : $"골드 {coreShop.Gold:N0} · 다이아 {coreShop.Diamonds:N0}";
             });
 
-            BuildSwordSummonCard(false, 20f, 66f, green);
-            BuildSwordSummonCard(true, 704f, 66f, red);
-
+            BuildUnifiedSwordSummonCard(20f, 66f, gold);
             BuildShopActionCard(20f, 280f, "오늘의 접속 보상",
                 "하루 한 번 골드·다이아·조각을 받습니다.", "무료", green, ClaimDaily);
             BuildShopActionCard(704f, 280f, "성장 골드 보급",
@@ -307,21 +295,16 @@ namespace PeanutWarrior.Prototype
                 "진행 중인 펫 알 부화를 즉시 끝냅니다.", "진행 상태에 따라 1~5 다이아", new Color(0.56f, 0.32f, 0.82f), FinishIncubation);
         }
 
-        private void BuildSwordSummonCard(bool boss, float x, float y, Color accent)
+        private void BuildUnifiedSwordSummonCard(float x, float y, Color accent)
         {
-            GameObject panel = Panel(root.transform, boss ? "Boss Sword Summon" : "Hunting Sword Summon",
-                x, y, 664f, 194f, card, accent);
-            Label(panel.transform, boss ? "보스용 검 소환" : "사냥용 검 소환",
-                22f, 14f, 420f, 38f, 22, darkGreen, TextAnchor.MiddleLeft, FontStyle.Bold);
+            GameObject panel = Panel(root.transform, "Unified Sword Summon", x, y, 1348f, 194f, card, accent);
+            Label(panel.transform, "검 장비 소환", 24f, 14f, 500f, 40f, 23, darkGreen, TextAnchor.MiddleLeft, FontStyle.Bold);
             Label(panel.transform,
-                "무속성·화염·냉기·번개 중 하나\n레어·에픽·유니크·레전드 등급 중 하나",
-                22f, 60f, 420f, 68f, 15, brown, TextAnchor.UpperLeft, FontStyle.Normal);
-            Text count = Label(panel.transform, string.Empty, 22f, 136f, 350f, 34f, 14, accent, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Button(panel.transform, "소환 · 5 다이아", 438f, 58f, 200f, 82f, accent, Color.white,
-                () => SummonSword(boss));
-            refreshers.Add(() => count.text = shop == null
-                ? "소환 기록 0회"
-                : $"누적 {(boss ? shop.BossSwordSummons : shop.HuntingSwordSummons):N0}회");
+                "무속성·화염·냉기·번개 중 하나를 획득합니다.\n한 장비에 사냥 효과와 보스 효과가 함께 있으며, 두 슬롯에 각각 장착할 수 있습니다.",
+                24f, 62f, 900f, 76f, 15, brown, TextAnchor.UpperLeft, FontStyle.Normal);
+            Text count = Label(panel.transform, string.Empty, 24f, 140f, 700f, 34f, 14, accent, TextAnchor.MiddleLeft, FontStyle.Bold);
+            Button(panel.transform, "소환 · 5 다이아", 1030f, 54f, 286f, 90f, accent, Color.white, SummonSword);
+            refreshers.Add(() => count.text = shop == null ? "소환 기록 0회" : $"누적 {shop.TotalSwordSummons:N0}회");
         }
 
         private void BuildShopActionCard(float x, float y, string title, string description, string cost, Color accent, Action action)
@@ -333,42 +316,25 @@ namespace PeanutWarrior.Prototype
             Button(panel.transform, "구매·수령", 438f, 46f, 200f, 72f, accent, Color.white, action);
         }
 
-        private void SummonCurrentCatalog()
+        private void SummonSword()
         {
-            SummonSword(bossCatalog);
-        }
-
-        private void SummonSword(bool boss)
-        {
-            if (shop == null)
-            {
-                Toast("검 소환 시스템 연결 대기");
-                return;
-            }
-            shop.TrySummonSword(boss);
+            if (shop == null) { Toast("검 소환 시스템 연결 대기"); return; }
+            shop.TrySummonSword();
             saveService?.SaveNow();
             Toast(shop.ShopMessage);
         }
 
-        private void EquipItem(int itemId)
+        private void EquipItem(int itemId, bool boss)
         {
-            if (equipment == null)
-            {
-                Toast("장비 도감 연결 대기");
-                return;
-            }
-            equipment.EquipItem(itemId, bossCatalog);
+            if (equipment == null) { Toast("장비 도감 연결 대기"); return; }
+            equipment.EquipItem(itemId, boss);
             saveService?.SaveNow();
             Toast(equipment.LastMessage);
         }
 
         private void UpgradeItem(int itemId)
         {
-            if (equipment == null)
-            {
-                Toast("장비 도감 연결 대기");
-                return;
-            }
+            if (equipment == null) { Toast("장비 도감 연결 대기"); return; }
             equipment.UpgradeItem(itemId);
             saveService?.SaveNow();
             Toast(equipment.LastMessage);
@@ -409,17 +375,14 @@ namespace PeanutWarrior.Prototype
         private string EquippedName(bool boss)
         {
             if (equipment == null) return "미장착";
-            ElementEquipmentCatalogPrototype.EquipmentDefinition definition =
-                equipment.GetDefinition(equipment.GetEquippedItem(boss));
+            ElementEquipmentCatalogPrototype.EquipmentDefinition definition = equipment.GetDefinition(equipment.GetEquippedItem(boss));
             return definition == null ? "미장착" : $"{equipment.ElementName((int)definition.Element)} · {definition.Name}";
         }
 
         private void Toast(string message)
         {
-            if (sourceUi != null && toastMethod != null)
-                toastMethod.Invoke(sourceUi, new object[] { message });
-            else
-                Debug.Log("[PeanutWarrior] " + message);
+            if (sourceUi != null && toastMethod != null) toastMethod.Invoke(sourceUi, new object[] { message });
+            else Debug.Log("[PeanutWarrior] " + message);
         }
 
         private GameObject Panel(Transform parent, string name, float x, float y, float width, float height, Color color, Color border)
@@ -451,7 +414,7 @@ namespace PeanutWarrior.Prototype
             colors.disabledColor = new Color(1f, 1f, 1f, 0.42f);
             button.colors = colors;
             if (action != null) button.onClick.AddListener(() => action());
-            Label(go.transform, text, 4f, 2f, width - 8f, height - 4f, 14, textColor, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Label(go.transform, text, 4f, 2f, width - 8f, height - 4f, 13, textColor, TextAnchor.MiddleCenter, FontStyle.Bold);
             return button;
         }
 

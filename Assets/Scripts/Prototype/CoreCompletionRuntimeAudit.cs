@@ -26,7 +26,7 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            for (int i = 0; i < 42; i++) yield return null;
+            for (int i = 0; i < 82; i++) yield return null;
 
             var errors = new List<string>();
             RequireSingle<IdleSystemsPrototype>(errors);
@@ -34,8 +34,11 @@ namespace PeanutWarrior.Prototype
             RequireSingle<MiniPeanutWorldViewPrototype>(errors);
             RequireSingle<PeanutSkillMenuV6>(errors);
             RequireSingle<BattleSkillDockV6>(errors);
+            RequireSingle<GlobalSkillAutoGatePrototype>(errors);
             RequireSingle<SpectacularPeanutSkillCombatPrototype>(errors);
             RequireSingle<SpectacularPeanutSkillWorldViewPrototype>(errors);
+            RequireSingle<PeanutBasicAttackWorldViewPrototype>(errors);
+            RequireSingle<SpectacularSkillIconSyncPrototype>(errors);
             RequireSingle<MenuLayoutCoordinatorV6>(errors);
             RequireSingle<PeanutMenuLayoutV4>(errors);
             RequireSingle<PeanutEquipmentAndShopMenuV5>(errors);
@@ -55,7 +58,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · eight spectacular peanut sword arts use distinct combat executions, costs, cooldowns and visual sequences; equipment detail and extreme execution rules remain connected.");
+                    "PASS · eight spectacular peanut sword arts use distinct combat, tactical AUTO, synchronized icons and unique visual sequences; basic attacks, equipment detail and extreme execution remain connected.");
                 yield break;
             }
 
@@ -96,11 +99,11 @@ namespace PeanutWarrior.Prototype
             MethodInfo separate = type.GetMethod("SeparatePets", PrivateInstance);
             MethodInfo uniqueTarget = type.GetMethod("FindClosestUnclaimedEnemy", PrivateInstance);
 
-            if (spacing == null) errors.Add("IdleSystemsPrototype must define a direct pet spacing constant.");
+            if (spacing == null) errors.Add("IdleSystemsPrototype must define a direct support-peanut spacing constant.");
             else if (Convert.ToSingle(spacing.GetRawConstantValue()) < 80f)
-                errors.Add("Direct pet minimum spacing is too small.");
+                errors.Add("Support-peanut minimum spacing is too small.");
             if (claimed == null) errors.Add("IdleSystemsPrototype must track claimed enemy targets.");
-            if (separate == null) errors.Add("IdleSystemsPrototype must apply pairwise pet separation.");
+            if (separate == null) errors.Add("IdleSystemsPrototype must apply pairwise support-peanut separation.");
             if (uniqueTarget == null) errors.Add("IdleSystemsPrototype must assign unclaimed hunting targets.");
         }
 
@@ -129,13 +132,28 @@ namespace PeanutWarrior.Prototype
                     "껍질 회전참", "낙화검우", "지맥꼬투리진", "왕실 꼬투리 천개",
                     "갑각해방", "땅콩 연환검", "낙화귀근", "황금핵 천단"
                 };
+                float[] expectedMp = { 20f, 25f, 30f, 42f, 22f, 30f, 38f, 55f };
+                float[] expectedCooldowns = { 6f, 9f, 12f, 18f, 10f, 13f, 17f, 24f };
                 for (int i = 0; i < expected.Length; i++)
                 {
                     if (skills.GetSkillName(i) != expected[i]) errors.Add("Unexpected skill name at index " + i + ".");
                     if (string.IsNullOrWhiteSpace(skills.GetSkillDescription(i))) errors.Add("Skill description is missing at index " + i + ".");
-                    if (skills.GetSkillMpCost(i) <= 0f) errors.Add("Skill MP cost is invalid at index " + i + ".");
-                    if (skills.GetSkillBaseCooldown(i) <= 0f) errors.Add("Skill cooldown is invalid at index " + i + ".");
+                    if (!Mathf.Approximately(skills.GetSkillMpCost(i), expectedMp[i])) errors.Add("Unexpected skill MP cost at index " + i + ".");
+                    if (!Mathf.Approximately(skills.GetSkillBaseCooldown(i), expectedCooldowns[i])) errors.Add("Unexpected skill cooldown at index " + i + ".");
                 }
+            }
+
+            GlobalSkillAutoGatePrototype autoGate = FindFirstObjectByType<GlobalSkillAutoGatePrototype>();
+            if (autoGate != null)
+            {
+                if (!autoGate.UsesConfirmedMpCosts)
+                    errors.Add("AUTO must gate casts with each skill's confirmed MP cost.");
+                if (!autoGate.UsesTacticalAutoPriority)
+                    errors.Add("AUTO must use the confirmed tactical priority for each battle mode.");
+                if (autoGate.HuntingAutoPriority != "지맥꼬투리진 → 왕실 꼬투리 천개 → 낙화검우 → 껍질 회전참")
+                    errors.Add("Hunting AUTO priority is incorrect.");
+                if (autoGate.BossAutoPriority != "갑각해방 → 낙화귀근 → 땅콩 연환검 → 황금핵 천단")
+                    errors.Add("Boss AUTO priority is incorrect.");
             }
 
             SpectacularPeanutSkillCombatPrototype combat = FindFirstObjectByType<SpectacularPeanutSkillCombatPrototype>();
@@ -156,6 +174,23 @@ namespace PeanutWarrior.Prototype
                     errors.Add("Each skill must have a unique spectacle sequence.");
                 if (!visuals.ReplacesLegacyGenericSkillEffects)
                     errors.Add("Legacy generic skill effects must not remain the active renderer.");
+            }
+
+            PeanutBasicAttackWorldViewPrototype basicAttackVisual = FindFirstObjectByType<PeanutBasicAttackWorldViewPrototype>();
+            if (basicAttackVisual != null && !basicAttackVisual.PreservesBasicAttackEffects)
+                errors.Add("Replacing generic skill effects must not remove basic attack slashes.");
+
+            SpectacularSkillIconSyncPrototype iconSync = FindFirstObjectByType<SpectacularSkillIconSyncPrototype>();
+            if (iconSync != null)
+            {
+                if (!iconSync.SynchronizesMenuAndBattleIcons)
+                    errors.Add("Skill menu and battle dock must use the same confirmed icons.");
+                if (!iconSync.SynchronizesSkillColors)
+                    errors.Add("Skill menu and battle dock must use the same confirmed colors.");
+                if (!iconSync.WaitsForBuilderAssetInitialization)
+                    errors.Add("Skill icon synchronization must run after builder asset initialization.");
+                if (iconSync.SynchronizedIconCount != 8)
+                    errors.Add("All eight skill icons must be synchronized.");
             }
 
             BattleSkillDockV6 dock = FindFirstObjectByType<BattleSkillDockV6>();

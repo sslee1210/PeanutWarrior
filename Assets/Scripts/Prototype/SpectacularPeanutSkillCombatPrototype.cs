@@ -22,7 +22,6 @@ namespace PeanutWarrior.Prototype
         private FieldInfo playerPositionField;
         private FieldInfo playerAttackCooldownField;
         private FieldInfo combatMessageField;
-        private FieldInfo advancementTierField;
         private PropertyInfo attackDamageProperty;
         private PropertyInfo advancementMultiplierProperty;
         private MethodInfo dealDamageMethod;
@@ -32,6 +31,9 @@ namespace PeanutWarrior.Prototype
         public bool UsesEightDistinctSkillExecutions => true;
         public bool CorrectsLegacySkillCostsAndCooldowns => true;
         public bool UsesHuntingAreaAndBossFocusRoles => true;
+        public bool UsesAdvancementHitEvolution => true;
+        public bool UsesAdvancementTargetEvolution => true;
+        public bool UsesAdvancementPatternEvolution => true;
         public string LastTriggeredSkill { get; private set; } = "스킬 전투 대기";
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -67,7 +69,6 @@ namespace PeanutWarrior.Prototype
             playerPositionField = arenaType.GetField("playerPosition", PrivateInstance);
             playerAttackCooldownField = arenaType.GetField("playerAttackCooldown", PrivateInstance);
             combatMessageField = arenaType.GetField("combatMessage", PrivateInstance);
-            advancementTierField = arenaType.GetField("advancementTier", PrivateInstance);
             attackDamageProperty = arenaType.GetProperty("PlayerAttackDamage", PrivateInstance);
             advancementMultiplierProperty = arenaType.GetProperty("SkillAdvancementMultiplier", PrivateInstance);
             dealDamageMethod = arenaType.GetMethod("DealDamage", PrivateInstance);
@@ -91,8 +92,7 @@ namespace PeanutWarrior.Prototype
 
             for (int i = 0; i < cooldowns.Length && i < previousCooldowns.Length; i++)
             {
-                bool cast = i >= activeStart && i < activeStart + 4 &&
-                            cooldowns[i] > previousCooldowns[i] + 1f;
+                bool cast = i >= activeStart && i < activeStart + 4 && cooldowns[i] > previousCooldowns[i] + 1f;
                 previousCooldowns[i] = cooldowns[i];
                 if (!cast) continue;
 
@@ -122,18 +122,18 @@ namespace PeanutWarrior.Prototype
 
             float supplementalDamage = Mathf.Max(0f, skills.GetSkillTotalDamage(index) - LegacyDirectDamage(index));
             LastTriggeredSkill = skills.GetSkillName(index);
-            SetCombatMessage($"{LastTriggeredSkill} · {skills.GetSkillRole(index)}");
+            SetCombatMessage($"{LastTriggeredSkill} · {skills.GetEvolutionGradeName()} 진화 · {skills.GetSkillRole(index)}");
 
             switch (index)
             {
                 case 0:
-                    ExecuteShellCyclone(enemies, supplementalDamage);
+                    StartCoroutine(ExecuteShellCyclone(enemies, supplementalDamage));
                     break;
                 case 1:
                     StartCoroutine(ExecuteFallingFlowerSwordRain(supplementalDamage));
                     break;
                 case 2:
-                    ExecuteLeylinePodFormation(enemies, supplementalDamage);
+                    StartCoroutine(ExecuteLeylinePodFormation(enemies, supplementalDamage));
                     break;
                 case 3:
                     StartCoroutine(ExecuteRoyalPodArmory(supplementalDamage));
@@ -148,66 +148,95 @@ namespace PeanutWarrior.Prototype
                     StartCoroutine(ExecuteFallenFlowerRoot(enemies, supplementalDamage));
                     break;
                 case 7:
-                    ExecuteGoldenCoreHeavenSever(enemies, supplementalDamage);
+                    StartCoroutine(ExecuteGoldenCoreHeavenSever(enemies, supplementalDamage));
                     break;
             }
         }
 
-        private void ExecuteShellCyclone(IList enemies, float damage)
+        private IEnumerator ExecuteShellCyclone(IList enemies, float damage)
         {
-            List<object> targets = GetNormalEnemiesSortedByDistance(enemies, ReadPlayerPosition(), 6);
-            if (targets.Count == 0) return;
-            float perTarget = damage / Mathf.Max(1, targets.Count);
-            for (int i = 0; i < targets.Count; i++)
+            int targetLimit = skills.GetSkillTargetCount(0);
+            int hits = Mathf.Max(1, skills.GetSkillHitCount(0));
+            int waves = Mathf.Max(1, skills.GetSkillWaveCount(0));
+            List<object> targets = GetNormalEnemiesSortedByDistance(enemies, ReadPlayerPosition(), targetLimit);
+            if (targets.Count == 0) yield break;
+
+            float perHit = damage / hits;
+            int hitsPerWave = Mathf.Max(1, Mathf.CeilToInt(hits / (float)waves));
+            for (int hit = 0; hit < hits; hit++)
             {
-                object target = targets[i];
+                object target = FindNextLivingTarget(targets, hit);
+                if (target == null) yield break;
                 if (TryReadPosition(target, out Vector2 position) && playerPositionField != null)
                     playerPositionField.SetValue(arena, ClampArenaPosition(position + UnityEngine.Random.insideUnitCircle * 34f));
-                Deal(target, perTarget, true);
+                Deal(target, perHit, true);
+                if ((hit + 1) % hitsPerWave == 0) yield return new WaitForSeconds(0.07f);
             }
         }
 
         private IEnumerator ExecuteFallingFlowerSwordRain(float damage)
         {
-            const int waves = 4;
-            for (int wave = 0; wave < waves; wave++)
+            int hits = Mathf.Max(1, skills.GetSkillHitCount(1));
+            int waves = Mathf.Max(1, skills.GetSkillWaveCount(1));
+            int targetLimit = skills.GetSkillTargetCount(1);
+            float perHit = damage / hits;
+            int hitsPerWave = Mathf.Max(1, Mathf.CeilToInt(hits / (float)waves));
+
+            for (int hit = 0; hit < hits; hit++)
             {
                 IList enemies = GetEnemies();
-                if (enemies == null || enemies.Count == 0) yield break;
-                List<object> targets = CopyTargets(enemies, bossOnly: false);
-                float perHit = damage / Mathf.Max(1, waves * targets.Count);
-                for (int i = 0; i < targets.Count; i++) Deal(targets[i], perHit, true);
-                yield return new WaitForSeconds(0.12f);
+                List<object> targets = CopyTargetsLimited(enemies, false, targetLimit);
+                object target = FindNextLivingTarget(targets, hit);
+                if (target == null) yield break;
+                Deal(target, perHit, true);
+                if ((hit + 1) % hitsPerWave == 0) yield return new WaitForSeconds(0.09f);
             }
         }
 
-        private void ExecuteLeylinePodFormation(IList enemies, float damage)
+        private IEnumerator ExecuteLeylinePodFormation(IList enemies, float damage)
         {
-            List<object> targets = CopyTargets(enemies, bossOnly: false);
-            if (targets.Count == 0) return;
+            int targetLimit = skills.GetSkillTargetCount(2);
+            int hits = Mathf.Max(1, skills.GetSkillHitCount(2));
+            int waves = Mathf.Max(1, skills.GetSkillWaveCount(2));
+            List<object> targets = CopyTargetsLimited(enemies, false, targetLimit);
+            if (targets.Count == 0) yield break;
+
             Vector2 center = AveragePosition(targets);
-            float perTarget = damage / Mathf.Max(1, targets.Count);
+            float pullStrength = Mathf.Clamp01(0.60f + skills.CurrentAdvancementTier * 0.04f);
             for (int i = 0; i < targets.Count; i++)
             {
                 object target = targets[i];
-                WritePosition(target, Vector2.Lerp(ReadPosition(target), center, 0.72f));
-                WriteFloat(target, "FrostTimer", 2.4f);
-                Deal(target, perTarget, true);
+                WritePosition(target, Vector2.Lerp(ReadPosition(target), center, pullStrength));
+                WriteFloat(target, "FrostTimer", 2.4f + skills.CurrentAdvancementTier * 0.2f);
+            }
+
+            float perHit = damage / hits;
+            int hitsPerWave = Mathf.Max(1, Mathf.CeilToInt(hits / (float)waves));
+            for (int hit = 0; hit < hits; hit++)
+            {
+                object target = FindNextLivingTarget(targets, hit);
+                if (target == null) yield break;
+                Deal(target, perHit, true);
+                if ((hit + 1) % hitsPerWave == 0) yield return new WaitForSeconds(0.10f);
             }
         }
 
         private IEnumerator ExecuteRoyalPodArmory(float damage)
         {
-            const int waves = 5;
-            for (int wave = 0; wave < waves; wave++)
+            int targetLimit = skills.GetSkillTargetCount(3);
+            int hits = Mathf.Max(1, skills.GetSkillHitCount(3));
+            int waves = Mathf.Max(1, skills.GetSkillWaveCount(3));
+            float perHit = damage / hits;
+            int hitsPerWave = Mathf.Max(1, Mathf.CeilToInt(hits / (float)waves));
+
+            for (int hit = 0; hit < hits; hit++)
             {
-                IList enemies = GetEnemies();
-                if (enemies == null || enemies.Count == 0) yield break;
-                List<object> targets = CopyTargets(enemies, bossOnly: false);
-                float waveScale = wave == waves - 1 ? 0.36f : 0.16f;
-                float perTarget = damage * waveScale / Mathf.Max(1, targets.Count);
-                for (int i = 0; i < targets.Count; i++) Deal(targets[i], perTarget, true);
-                yield return new WaitForSeconds(wave == waves - 1 ? 0.04f : 0.13f);
+                List<object> targets = CopyTargetsLimited(GetEnemies(), false, targetLimit);
+                object target = FindNextLivingTarget(targets, hit);
+                if (target == null) yield break;
+                float finalScale = hit == hits - 1 ? 1.6f : 1f;
+                Deal(target, perHit * finalScale, true);
+                if ((hit + 1) % hitsPerWave == 0) yield return new WaitForSeconds(0.08f);
             }
         }
 
@@ -215,9 +244,14 @@ namespace PeanutWarrior.Prototype
         {
             object boss = FindBoss(enemies);
             if (boss == null) return;
-            armorReleaseTimer = 6f;
-            float perBlade = damage / 6f;
-            for (int i = 0; i < 6; i++) Deal(boss, perBlade, true);
+            int blades = Mathf.Max(1, skills.GetSkillHitCount(4));
+            armorReleaseTimer = skills.GetSkillSpecialDuration(4);
+            float perBlade = damage / blades;
+            for (int i = 0; i < blades; i++)
+            {
+                if (!ContainsReference(GetEnemies(), boss)) break;
+                Deal(boss, perBlade, true);
+            }
         }
 
         private void ExecutePeanutChainSword(IList enemies, float damage)
@@ -229,7 +263,8 @@ namespace PeanutWarrior.Prototype
             for (int i = 0; i < hits; i++)
             {
                 if (!ContainsReference(GetEnemies(), boss)) break;
-                Deal(boss, perHit, true);
+                float finalScale = i == hits - 1 ? 1.5f : 1f;
+                Deal(boss, perHit * finalScale, true);
             }
         }
 
@@ -237,20 +272,43 @@ namespace PeanutWarrior.Prototype
         {
             object boss = FindBoss(enemies);
             if (boss == null) yield break;
+
+            int hits = Mathf.Max(2, skills.GetSkillHitCount(6));
+            int waves = Mathf.Max(2, skills.GetSkillWaveCount(6));
+            float duration = Mathf.Max(1f, skills.GetSkillSpecialDuration(6));
             float startHp = ReadFloat(boss, "Hp", 0f);
-            Deal(boss, damage * 0.45f, true);
-            yield return new WaitForSeconds(3.2f);
+            Deal(boss, damage * 0.25f, true);
+
+            int pulseHits = Mathf.Max(0, hits - 2);
+            float pulseDamage = pulseHits > 0 ? damage * 0.30f / pulseHits : 0f;
+            float delay = duration / Mathf.Max(1, waves);
+            for (int hit = 0; hit < pulseHits; hit++)
+            {
+                yield return new WaitForSeconds(delay / Mathf.Max(1, Mathf.CeilToInt(pulseHits / (float)waves)));
+                if (!ContainsReference(GetEnemies(), boss)) yield break;
+                Deal(boss, pulseDamage, true);
+            }
+
+            yield return new WaitForSeconds(delay);
             if (!ContainsReference(GetEnemies(), boss)) yield break;
             float currentHp = ReadFloat(boss, "Hp", 0f);
-            float storedDamage = Mathf.Max(0f, startHp - currentHp) * 0.32f;
-            Deal(boss, damage * 0.55f + storedDamage, true);
+            float storedDamage = Mathf.Max(0f, startHp - currentHp) * skills.GetSkillStoredDamageRatio(6);
+            Deal(boss, damage * 0.45f + storedDamage, true);
         }
 
-        private void ExecuteGoldenCoreHeavenSever(IList enemies, float damage)
+        private IEnumerator ExecuteGoldenCoreHeavenSever(IList enemies, float damage)
         {
             object boss = FindBoss(enemies);
-            if (boss == null) return;
-            Deal(boss, damage, true);
+            if (boss == null) yield break;
+            int slashes = Mathf.Max(1, skills.GetSkillHitCount(7));
+            float perSlash = damage / slashes;
+            for (int i = 0; i < slashes; i++)
+            {
+                if (!ContainsReference(GetEnemies(), boss)) yield break;
+                float finalScale = i == slashes - 1 ? 1.4f : 1f;
+                Deal(boss, perSlash * finalScale, true);
+                if (i < slashes - 1) yield return new WaitForSeconds(0.18f);
+            }
         }
 
         private void UpdateArmorRelease()
@@ -260,7 +318,10 @@ namespace PeanutWarrior.Prototype
             if (playerAttackCooldownField == null) return;
             float cooldown = Convert.ToSingle(playerAttackCooldownField.GetValue(arena));
             if (cooldown > 0f)
-                playerAttackCooldownField.SetValue(arena, cooldown - Time.deltaTime * 0.55f);
+            {
+                float acceleration = 0.55f + skills.CurrentAdvancementTier * 0.06f;
+                playerAttackCooldownField.SetValue(arena, cooldown - Time.deltaTime * acceleration);
+            }
         }
 
         private float LegacyDirectDamage(int index)
@@ -300,9 +361,21 @@ namespace PeanutWarrior.Prototype
             dealDamageMethod.Invoke(arena, new[] { target, (object)damage, applyElement });
         }
 
-        private void SetCombatMessage(string message)
+        private void SetCombatMessage(string value)
         {
-            combatMessageField?.SetValue(arena, message);
+            combatMessageField?.SetValue(arena, value);
+        }
+
+        private object FindNextLivingTarget(List<object> targets, int offset)
+        {
+            if (targets == null || targets.Count == 0) return null;
+            IList current = GetEnemies();
+            for (int step = 0; step < targets.Count; step++)
+            {
+                object candidate = targets[(offset + step) % targets.Count];
+                if (ContainsReference(current, candidate)) return candidate;
+            }
+            return null;
         }
 
         private static object FindBoss(IList enemies)
@@ -332,9 +405,16 @@ namespace PeanutWarrior.Prototype
             return result;
         }
 
+        private static List<object> CopyTargetsLimited(IList enemies, bool bossOnly, int maximum)
+        {
+            List<object> targets = CopyTargets(enemies, bossOnly);
+            if (targets.Count > maximum) targets.RemoveRange(maximum, targets.Count - maximum);
+            return targets;
+        }
+
         private static List<object> GetNormalEnemiesSortedByDistance(IList enemies, Vector2 origin, int maximum)
         {
-            List<object> targets = CopyTargets(enemies, bossOnly: false);
+            List<object> targets = CopyTargets(enemies, false);
             targets.Sort((left, right) =>
                 Vector2.SqrMagnitude(ReadPosition(left) - origin).CompareTo(Vector2.SqrMagnitude(ReadPosition(right) - origin)));
             if (targets.Count > maximum) targets.RemoveRange(maximum, targets.Count - maximum);

@@ -200,6 +200,12 @@ namespace PeanutWarrior.Prototype
 
         private bool CastQueuedSkill(int index, object target, float[] cooldowns)
         {
+            float desiredCost = skillManager.GetSkillMpCost(index);
+            float legacyCost = 20f + (index % 4) * 5f;
+            float mpBefore = ReadPlayerMp();
+            if (mpBefore < legacyCost)
+                playerMpField.SetValue(arena, legacyCost);
+
             float[] saved = new float[4];
             for (int offset = 0; offset < 4; offset++)
             {
@@ -220,11 +226,13 @@ namespace PeanutWarrior.Prototype
             if (!cast)
             {
                 cooldowns[index] = saved[index - activeStart];
+                playerMpField.SetValue(arena, mpBefore);
                 return false;
             }
 
             correctResourceMethod.Invoke(spectacularCombat, new object[] { index, cooldowns });
             executeSkillMethod.Invoke(spectacularCombat, new object[] { index });
+            playerMpField.SetValue(arena, Mathf.Max(0f, mpBefore - desiredCost));
 
             float[] previous = spectacularPreviousCooldownsField?.GetValue(spectacularCombat) as float[];
             if (previous != null && index < previous.Length) previous[index] = cooldowns[index];

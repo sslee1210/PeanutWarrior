@@ -9,11 +9,11 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Loads the illustrated battle atlas and applies it directly to the real
-    /// RuntimeWorldViewPrototype SpriteRenderers. The atlas loader deliberately
-    /// removes invalid characters and per-chunk padding before rebuilding one
-    /// valid Base64 payload, so Git line endings or chunk boundaries cannot leave
-    /// the original circle placeholders visible.
+    /// Loads the illustrated battle atlas and binds it directly to the real runtime
+    /// unit SpriteRenderers. The original uploaded atlas was split into eight text
+    /// assets; two files were named in reverse order and one boundary contains a
+    /// duplicated Base64 character. Each logical chunk is therefore validated by
+    /// its known prefix and exact payload length before the PNG is decoded.
     /// </summary>
     [DefaultExecutionOrder(25000)]
     public sealed class ProceduralBattleArtPrototype : MonoBehaviour
@@ -22,8 +22,23 @@ namespace PeanutWarrior.Prototype
         private const BindingFlags PublicInstance = BindingFlags.Instance | BindingFlags.Public;
         private const int AtlasColumns = 6;
         private const int AtlasRows = 4;
-        private const int AtlasChunkCount = 8;
+        private const int AtlasChunkPayloadLength = 11264;
         private const float WorldTileSize = 1.45f;
+
+        // Physical files 03 and 04 contain logical chunks 04 and 03 respectively.
+        private static readonly int[] AtlasChunkOrder = { 0, 1, 2, 4, 3, 5, 6, 7 };
+
+        private static readonly string[] AtlasChunkPrefixes =
+        {
+            "iVBOR",
+            "ldpuLN8/",
+            "4t3m2O5u",
+            "EUKchbEa",
+            "LP3X8+if",
+            "ALDhywER",
+            "DYAOA0qz",
+            "UWW/ufUt"
+        };
 
         private RuntimeWorldViewPrototype worldView;
         private StageFlowController stageFlow;
@@ -76,11 +91,13 @@ namespace PeanutWarrior.Prototype
 
         private bool LoadAtlas()
         {
-            StringBuilder sanitized = new StringBuilder(100000);
+            StringBuilder completePayload = new StringBuilder(
+                AtlasChunkPayloadLength * AtlasChunkOrder.Length);
 
-            for (int index = 0; index < AtlasChunkCount; index++)
+            for (int logicalIndex = 0; logicalIndex < AtlasChunkOrder.Length; logicalIndex++)
             {
-                string path = $"PeanutWarrior/AtlasChunks/peanut_battle_atlas_{index:00}";
+                int physicalIndex = AtlasChunkOrder[logicalIndex];
+                string path = $"PeanutWarrior/AtlasChunks/peanut_battle_atlas_{physicalIndex:00}";
                 TextAsset chunk = Resources.Load<TextAsset>(path);
                 if (chunk == null)
                 {
@@ -88,50 +105,73 @@ namespace PeanutWarrior.Prototype
                     return false;
                 }
 
-                AppendBase64Payload(sanitized, chunk.text);
+                string payload = SanitizeBase64(chunk.text);
+                string expectedPrefix = AtlasChunkPrefixes[logicalIndex];
+                int prefixOffset = payload.IndexOf(expectedPrefix, StringComparison.Ordinal);
+                if (prefixOffset < 0)
+                {
+                    Debug.LogError(
+                        $"[PeanutArt] Chunk {physicalIndex:00} does not contain logical prefix " +
+                        $"{expectedPrefix}.");
+                    return false;
+                }
+
+                int available = payload.Length - prefixOffset;
+                if (available < AtlasChunkPayloadLength)
+                {
+                    Debug.LogError(
+                        $"[PeanutArt] Chunk {physicalIndex:00} is truncated. " +
+                        $"Available {available}, expected {AtlasChunkPayloadLength} characters.");
+                    return false;
+                }
+
+                if (prefixOffset > 0 || available > AtlasChunkPayloadLength)
+                {
+                    Debug.LogWarning(
+                        $"[PeanutArt] Repaired chunk {physicalIndex:00}: " +
+                        $"prefix offset {prefixOffset}, payload {payload.Length} characters.");
+                }
+
+                completePayload.Append(payload, prefixOffset, AtlasChunkPayloadLength);
             }
 
-            if (sanitized.Length == 0)
+            int expectedLength = AtlasChunkPayloadLength * AtlasChunkOrder.Length;
+            if (completePayload.Length != expectedLength)
             {
-                Debug.LogError("[PeanutArt] Atlas payload is empty after sanitizing the chunks.");
+                Debug.LogError(
+                    $"[PeanutArt] Rebuilt atlas length is {completePayload.Length}; " +
+                    $"expected {expectedLength}.");
                 return false;
             }
-
-            int remainder = sanitized.Length % 4;
-            if (remainder == 1)
-            {
-                Debug.LogError($"[PeanutArt] Atlas payload has an unrecoverable Base64 length: {sanitized.Length}.");
-                return false;
-            }
-
-            if (remainder > 0)
-                sanitized.Append('=', 4 - remainder);
 
             try
             {
-                byte[] bytes = Convert.FromBase64String(sanitized.ToString());
+                byte[] bytes = Convert.FromBase64String(completePayload.ToString());
                 if (!HasPngSignature(bytes))
                 {
                     Debug.LogError($"[PeanutArt] Decoded atlas is not a PNG. Byte count: {bytes.Length}.");
                     return false;
                 }
 
-                atlasTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+                Texture2D decodedTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false)
                 {
                     name = "Peanut Battle Atlas",
                     filterMode = FilterMode.Bilinear,
                     wrapMode = TextureWrapMode.Clamp
                 };
 
-                if (!atlasTexture.LoadImage(bytes, false))
+                if (!decodedTexture.LoadImage(bytes, false))
                 {
+                    Destroy(decodedTexture);
                     Debug.LogError("[PeanutArt] Texture2D.LoadImage returned false.");
                     return false;
                 }
+
+                atlasTexture = decodedTexture;
             }
             catch (Exception exception)
             {
-                Debug.LogError($"[PeanutArt] Atlas decode failed after sanitizing: {exception}");
+                Debug.LogError($"[PeanutArt] Atlas decode failed after chunk repair: {exception}");
                 return false;
             }
 
@@ -166,14 +206,15 @@ namespace PeanutWarrior.Prototype
 
             Debug.Log(
                 $"[PeanutArt] Atlas loaded: {atlasTexture.width}x{atlasTexture.height}, " +
-                $"{atlasSprites.Length} sprites ready, sanitized payload {sanitized.Length} chars.");
+                $"{atlasSprites.Length} sprites ready.");
             return true;
         }
 
-        private static void AppendBase64Payload(StringBuilder destination, string source)
+        private static string SanitizeBase64(string source)
         {
-            if (string.IsNullOrEmpty(source)) return;
+            if (string.IsNullOrEmpty(source)) return string.Empty;
 
+            StringBuilder result = new StringBuilder(source.Length);
             for (int index = 0; index < source.Length; index++)
             {
                 char value = source[index];
@@ -183,11 +224,9 @@ namespace PeanutWarrior.Prototype
                     (value >= '0' && value <= '9');
 
                 if (alphaNumeric || value == '+' || value == '/')
-                    destination.Append(value);
-
-                // '=' is intentionally discarded here. Padding is valid only once,
-                // at the end of the complete payload, and is rebuilt after all chunks.
+                    result.Append(value);
             }
+            return result.ToString();
         }
 
         private static bool HasPngSignature(byte[] bytes)

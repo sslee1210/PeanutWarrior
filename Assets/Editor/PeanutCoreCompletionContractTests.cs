@@ -84,7 +84,7 @@ namespace PeanutWarrior.Tests
         }
 
         [Test]
-        public void SkillMenu_IsCardlessAndShowsAccurateDetails()
+        public void Skills_UseConfirmedSpectacularPeanutSwordArts()
         {
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("SkillIconCount", PublicInstance));
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("UsesCardlessSkillLayout", PublicInstance));
@@ -92,9 +92,29 @@ namespace PeanutWarrior.Tests
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("AutoButtonIsTopLeft", PublicInstance));
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("UsesSkillDetailWindow", PublicInstance));
             Assert.NotNull(typeof(PeanutSkillMenuV6).GetProperty("ShowsAccurateDamageDetails", PublicInstance));
+
+            Assert.NotNull(typeof(SkillManagementPrototype).GetProperty("ConfirmedSkillCount", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetProperty("UsesDistinctSkillTimings", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetProperty("UsesSpectacularPeanutSwordArts", PublicInstance));
             Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillDescription", PublicInstance));
             Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillTotalDamage", PublicInstance));
             Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillCombatSummary", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillRole", PublicInstance));
+
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetProperty("UsesEightDistinctSkillExecutions", PublicInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetProperty("CorrectsLegacySkillCostsAndCooldowns", PublicInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetProperty("UsesHuntingAreaAndBossFocusRoles", PublicInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetMethod("ExecuteSkill", PrivateInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetMethod("ExecuteShellCyclone", PrivateInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetMethod("ExecutePeanutChainSword", PrivateInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetMethod("ExecuteGoldenCoreHeavenSever", PrivateInstance));
+
+            Assert.NotNull(typeof(SpectacularPeanutSkillWorldViewPrototype).GetProperty("UsesEightUniqueSpectacleSequences", PublicInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillWorldViewPrototype).GetProperty("ReplacesLegacyGenericSkillEffects", PublicInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillWorldViewPrototype).GetMethod("PlaySkillSequence", PrivateInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillWorldViewPrototype).GetMethod("SpawnFlower", PrivateInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillWorldViewPrototype).GetMethod("SpawnPodPortal", PrivateInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillWorldViewPrototype).GetMethod("SpawnCore", PrivateInstance));
         }
 
         [Test]

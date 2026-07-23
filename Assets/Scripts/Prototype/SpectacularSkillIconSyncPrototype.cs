@@ -9,8 +9,10 @@ namespace PeanutWarrior.Prototype
     public sealed class SpectacularSkillIconSyncPrototype : MonoBehaviour
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+        private const BindingFlags PrivateStatic = BindingFlags.Static | BindingFlags.NonPublic;
 
         public bool SynchronizesMenuAndBattleIcons => true;
+        public bool SynchronizesSkillColors => true;
         public int SynchronizedIconCount { get; private set; }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -41,13 +43,25 @@ namespace PeanutWarrior.Prototype
         private void Apply(PeanutSkillMenuV6 menu, BattleSkillDockV6 dock)
         {
             Sprite[] shared = new Sprite[8];
-            for (int i = 0; i < shared.Length; i++) shared[i] = SkillIconFactoryV6.Create(i);
+            Color[] sharedColors = new Color[8];
+            for (int i = 0; i < shared.Length; i++)
+            {
+                shared[i] = SkillIconFactoryV6.Create(i);
+                sharedColors[i] = SkillIconFactoryV6.ColorFor(i);
+            }
 
             FieldInfo menuSpritesField = typeof(PeanutSkillMenuV6).GetField("skillSprites", PrivateInstance);
             Sprite[] menuSprites = menuSpritesField?.GetValue(menu) as Sprite[];
             if (menuSprites != null)
             {
                 for (int i = 0; i < menuSprites.Length && i < shared.Length; i++) menuSprites[i] = shared[i];
+            }
+
+            FieldInfo menuColorsField = typeof(PeanutSkillMenuV6).GetField("SkillColors", PrivateStatic);
+            Color[] menuColors = menuColorsField?.GetValue(null) as Color[];
+            if (menuColors != null)
+            {
+                for (int i = 0; i < menuColors.Length && i < sharedColors.Length; i++) menuColors[i] = sharedColors[i];
             }
 
             FieldInfo dockIconsField = typeof(BattleSkillDockV6).GetField("icons", PrivateInstance);
@@ -69,7 +83,7 @@ namespace PeanutWarrior.Prototype
                     string suffix = image.gameObject.name.Substring("Skill Icon ".Length);
                     if (!int.TryParse(suffix, out int index) || index < 0 || index >= shared.Length) continue;
                     image.sprite = shared[index];
-                    image.color = SkillIconFactoryV6.ColorFor(index);
+                    image.color = sharedColors[index];
                 }
             }
 

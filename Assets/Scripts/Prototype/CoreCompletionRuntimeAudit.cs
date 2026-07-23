@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace PeanutWarrior.Prototype
 {
-    [DefaultExecutionOrder(34000)]
+    [DefaultExecutionOrder(35000)]
     public sealed class CoreCompletionRuntimeAudit : MonoBehaviour
     {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -20,11 +20,12 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            for (int i = 0; i < 22; i++) yield return null;
+            for (int i = 0; i < 32; i++) yield return null;
 
             var errors = new List<string>();
             RequireSingle<AdvancementProgressionPrototype>(errors);
             RequireSingle<PetProgressionPrototype>(errors);
+            RequireSingle<PetCombatSpreadPrototype>(errors);
             RequireSingle<GameSettingsPrototype>(errors);
             RequireSingle<PeanutSaveGameService>(errors);
             RequireSingle<OfflineProgressRewardPrototype>(errors);
@@ -33,6 +34,8 @@ namespace PeanutWarrior.Prototype
             RequireSingle<PeanutCoreMenuCompletionV3>(errors);
             RequireSingle<PeanutMenuLayoutV4>(errors);
             RequireSingle<PeanutEquipmentAndShopMenuV5>(errors);
+            RequireSingle<PeanutSkillMenuV6>(errors);
+            RequireSingle<MenuLayoutCoordinatorV6>(errors);
             RequireSingle<BottomNavigationOrderV4>(errors);
             RequireSingle<ElementEquipmentCatalogPrototype>(errors);
             RequireSingle<AdvancementWorldViewPrototype>(errors);
@@ -75,6 +78,14 @@ namespace PeanutWarrior.Prototype
                 if (stars != null)
                     for (int i = 0; i < stars.Length; i++)
                         if (stars[i] < 1 || stars[i] > 5) errors.Add("Pet star value is outside 1..5.");
+            }
+
+            PetCombatSpreadPrototype spread = FindFirstObjectByType<PetCombatSpreadPrototype>();
+            if (spread != null)
+            {
+                if (!spread.UsesSeparateTargets) errors.Add("Pets must receive separate hunting targets.");
+                if (!spread.UsesBossSurroundFormation) errors.Add("Pets must surround bosses from separate positions.");
+                if (spread.MinimumSpacing < 70f) errors.Add("Pet minimum spacing is too small.");
             }
 
             ElementEquipmentCatalogPrototype catalog = FindFirstObjectByType<ElementEquipmentCatalogPrototype>();
@@ -122,10 +133,22 @@ namespace PeanutWarrior.Prototype
                 if (menuV4.LayoutVersion != 4) errors.Add("Core menu layout version must be 4.");
                 if (menuV4.BottomMenuOrder != "성장 → 장비 → 스킬 → 펫 → 전직 → 상점")
                     errors.Add("Bottom navigation order is incorrect.");
-                if (!menuV4.UsesCircularSkillLayout) errors.Add("Skill page must use circular skill buttons.");
                 if (!menuV4.UsesSplitGrowthLayout) errors.Add("Growth page must split profile and upgrades.");
                 if (!menuV4.UsesPerTierAdvancementButtons) errors.Add("Advancement rows need individual buttons.");
             }
+
+            PeanutSkillMenuV6 skillMenu = FindFirstObjectByType<PeanutSkillMenuV6>();
+            if (skillMenu != null)
+            {
+                if (skillMenu.SkillIconCount != 8) errors.Add("Skill menu must contain eight skill icons.");
+                if (!skillMenu.UsesCardlessSkillLayout) errors.Add("Skill menu must not use rectangular skill cards.");
+                if (!skillMenu.UsesNamedSkillSilhouettes) errors.Add("Each skill needs a name-specific icon silhouette.");
+                if (!skillMenu.AutoButtonIsTopLeft) errors.Add("The global AUTO button must remain at the top-left.");
+            }
+
+            MenuLayoutCoordinatorV6 coordinator = FindFirstObjectByType<MenuLayoutCoordinatorV6>();
+            if (coordinator != null && !coordinator.UsesSingleOwnerPerPage)
+                errors.Add("Menu pages must have exactly one active layout owner.");
 
             PeanutEquipmentAndShopMenuV5 menuV5 = FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();
             if (menuV5 != null)
@@ -162,7 +185,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · navigation order, split growth, circular hunting/boss skills, per-tier advancement, separate 48-item hunting and 48-item boss sword catalogs, equipment V5 and separate summons are active.");
+                    "PASS · pets use separate targets and spacing, menu pages have one owner without flicker, skills use eight name-specific cardless icons with top-left AUTO, and the separated equipment catalogs remain active.");
                 yield break;
             }
 

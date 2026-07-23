@@ -25,12 +25,16 @@ namespace PeanutWarrior.Prototype
         private readonly int[] swordCopies = new int[4];
         private int dailyStreak;
         private int totalSwordSummons;
+        private int huntingSwordSummons;
+        private int bossSwordSummons;
         private string lastClaimDate = string.Empty;
-        private string shopMessage = "일일 보상·소환 준비";
+        private string shopMessage = "일일 보상·장비 소환 준비";
 
         public string ShopMessage => shopMessage;
         public int DailyStreak => dailyStreak;
         public int TotalSwordSummons => totalSwordSummons;
+        public int HuntingSwordSummons => huntingSwordSummons;
+        public int BossSwordSummons => bossSwordSummons;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateShop()
@@ -79,6 +83,27 @@ namespace PeanutWarrior.Prototype
             return true;
         }
 
+        public bool TryClaimDailyReward()
+        {
+            string before = shopMessage;
+            ClaimDailyReward();
+            return before != shopMessage && !shopMessage.Contains("이미 수령");
+        }
+
+        public bool TrySummonSword(bool boss)
+        {
+            int before = Diamonds;
+            SummonSword(boss);
+            return Diamonds < before;
+        }
+
+        public bool TryBuyEgg()
+        {
+            int before = Diamonds;
+            BuyEgg();
+            return Diamonds < before;
+        }
+
         private void ClaimDailyReward()
         {
             string today = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -114,7 +139,7 @@ namespace PeanutWarrior.Prototype
         {
             if (!SpendDiamonds(5))
             {
-                shopMessage = "장비 소환에 다이아 5개 필요";
+                shopMessage = $"{(equipForBoss ? "보스용" : "사냥용")} 검 소환에 다이아 5개 필요";
                 return;
             }
 
@@ -123,22 +148,26 @@ namespace PeanutWarrior.Prototype
             int rarity = rarityRoll < 20 ? 4 : rarityRoll < 120 ? 3 : rarityRoll < 420 ? 2 : 1;
             swordCopies[elementIndex]++;
             totalSwordSummons++;
+            if (equipForBoss) bossSwordSummons++;
+            else huntingSwordSummons++;
+
             swordProgression?.RegisterSummon(elementIndex, rarity);
-            equipmentCatalog?.RegisterSummon(elementIndex, rarity);
+            equipmentCatalog?.RegisterSummon(equipForBoss, elementIndex, rarity);
 
             FieldInfo targetField = equipForBoss ? bossElementField : huntingElementField;
             if (targetField != null)
                 targetField.SetValue(arena, Enum.ToObject(targetField.FieldType, elementIndex));
 
+            string use = equipForBoss ? "보스용" : "사냥용";
             if (totalSwordSummons % 5 == 0 && basicAttackLevelField != null)
             {
                 int level = Convert.ToInt32(basicAttackLevelField.GetValue(arena));
                 basicAttackLevelField.SetValue(arena, level + 1);
-                shopMessage = $"{ElementName(elementIndex)} {RarityName(rarity)} 장비 획득 · 장비 도감으로 기본 공격 강화";
+                shopMessage = $"{use} {ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 장비 도감으로 기본 공격 강화";
             }
             else
             {
-                shopMessage = $"{ElementName(elementIndex)} {RarityName(rarity)} 장비 획득";
+                shopMessage = $"{use} {ElementName(elementIndex)} 검 {RarityName(rarity)} 획득";
             }
             Save();
         }
@@ -165,6 +194,8 @@ namespace PeanutWarrior.Prototype
         {
             PlayerPrefs.SetInt(Prefix + "Streak", dailyStreak);
             PlayerPrefs.SetInt(Prefix + "SwordSummons", totalSwordSummons);
+            PlayerPrefs.SetInt(Prefix + "HuntingSwordSummons", huntingSwordSummons);
+            PlayerPrefs.SetInt(Prefix + "BossSwordSummons", bossSwordSummons);
             PlayerPrefs.SetString(Prefix + "LastClaim", lastClaimDate);
             for (int i = 0; i < swordCopies.Length; i++)
                 PlayerPrefs.SetInt(Prefix + "SwordCopies" + i, swordCopies[i]);
@@ -175,6 +206,8 @@ namespace PeanutWarrior.Prototype
         {
             dailyStreak = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "Streak", 0));
             totalSwordSummons = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "SwordSummons", 0));
+            huntingSwordSummons = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "HuntingSwordSummons", totalSwordSummons));
+            bossSwordSummons = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "BossSwordSummons", 0));
             lastClaimDate = PlayerPrefs.GetString(Prefix + "LastClaim", string.Empty);
             for (int i = 0; i < swordCopies.Length; i++)
                 swordCopies[i] = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "SwordCopies" + i, 0));
@@ -192,7 +225,7 @@ namespace PeanutWarrior.Prototype
 
         private static string ElementName(int index)
         {
-            return index switch { 0 => "무속성", 1 => "화염", 2 => "냉기", 3 => "번개", _ => "장비" };
+            return index switch { 0 => "무속성", 1 => "화염", 2 => "냉기", 3 => "번개", _ => "검" };
         }
 
         private static string RarityName(int rarity)

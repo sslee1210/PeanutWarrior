@@ -36,6 +36,43 @@ namespace PeanutWarrior.Tests
             Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillBaseCooldown", PublicInstance));
             Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillMpCost", PublicInstance));
         }
+
+        [Test]
+        public void Advancement_ChangesVisibleHitTargetWaveAndRangeStructure()
+        {
+            Assert.NotNull(typeof(SkillManagementPrototype).GetProperty("EvolvesHitCounts", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetProperty("EvolvesTargetCounts", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetProperty("EvolvesVisualDensity", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetProperty("EvolvesSkillPatterns", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetProperty("CurrentEvolutionRank", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillHitCount", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillTargetCount", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillWaveCount", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillVisualObjectCount", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillRangeMultiplier", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillEvolutionSummary", PublicInstance));
+            Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetNextAdvancementEvolutionSummary", PublicInstance));
+
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetProperty("UsesAdvancementHitEvolution", PublicInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetProperty("UsesAdvancementTargetEvolution", PublicInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetProperty("UsesAdvancementPatternEvolution", PublicInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetMethod("ExecuteShellCyclone", PrivateInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetMethod("ExecuteFallingFlowerSwordRain", PrivateInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetMethod("ExecuteLeylinePodFormation", PrivateInstance));
+            Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetMethod("ExecuteGoldenCoreHeavenSever", PrivateInstance));
+        }
+
+        [Test]
+        public void Advancement_AddsPerTierSkillEffectsAndAscensionBurst()
+        {
+            Assert.NotNull(typeof(AdvancementSkillEvolutionWorldViewPrototype).GetProperty("UsesPerTierVisualEvolution", PublicInstance));
+            Assert.NotNull(typeof(AdvancementSkillEvolutionWorldViewPrototype).GetProperty("ScalesEffectObjectCounts", PublicInstance));
+            Assert.NotNull(typeof(AdvancementSkillEvolutionWorldViewPrototype).GetProperty("ChangesAdvancementColorTheme", PublicInstance));
+            Assert.NotNull(typeof(AdvancementSkillEvolutionWorldViewPrototype).GetProperty("ShowsAdvancementAscensionBurst", PublicInstance));
+            Assert.NotNull(typeof(AdvancementSkillEvolutionWorldViewPrototype).GetMethod("PlayEvolutionOverlay", PrivateInstance));
+            Assert.NotNull(typeof(AdvancementSkillEvolutionWorldViewPrototype).GetMethod("PlayAdvancementAscension", PrivateInstance));
+            Assert.NotNull(typeof(AdvancementSkillEvolutionWorldViewPrototype).GetMethod("AdvancementColor", PrivateInstance));
+        }
     }
 }
 #endif

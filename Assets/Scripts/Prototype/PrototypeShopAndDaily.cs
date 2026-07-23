@@ -17,8 +17,6 @@ namespace PeanutWarrior.Prototype
         private FieldInfo goldField;
         private FieldInfo fragmentsField;
         private FieldInfo diamondsField;
-        private FieldInfo huntingElementField;
-        private FieldInfo bossElementField;
         private FieldInfo basicAttackLevelField;
         private FieldInfo eggsField;
 
@@ -61,8 +59,6 @@ namespace PeanutWarrior.Prototype
             goldField = arenaType.GetField("gold", PrivateInstance);
             fragmentsField = arenaType.GetField("fragments", PrivateInstance);
             diamondsField = arenaType.GetField("diamonds", PrivateInstance);
-            huntingElementField = arenaType.GetField("huntingElement", PrivateInstance);
-            bossElementField = arenaType.GetField("bossElement", PrivateInstance);
             basicAttackLevelField = arenaType.GetField("basicAttackLevel", PrivateInstance);
             if (idleSystems != null) eggsField = typeof(IdleSystemsPrototype).GetField("eggs", PrivateInstance);
             Load();
@@ -154,10 +150,6 @@ namespace PeanutWarrior.Prototype
             swordProgression?.RegisterSummon(elementIndex, rarity);
             equipmentCatalog?.RegisterSummon(equipForBoss, elementIndex, rarity);
 
-            FieldInfo targetField = equipForBoss ? bossElementField : huntingElementField;
-            if (targetField != null)
-                targetField.SetValue(arena, Enum.ToObject(targetField.FieldType, elementIndex));
-
             string use = equipForBoss ? "보스용" : "사냥용";
             if (totalSwordSummons % 5 == 0 && basicAttackLevelField != null)
             {
@@ -167,7 +159,7 @@ namespace PeanutWarrior.Prototype
             }
             else
             {
-                shopMessage = $"{use} {ElementName(elementIndex)} 검 {RarityName(rarity)} 획득";
+                shopMessage = $"{use} {ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 장비 화면에서 장착";
             }
             Save();
         }

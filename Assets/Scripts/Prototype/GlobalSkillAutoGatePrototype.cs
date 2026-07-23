@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using PeanutWarrior.Core;
 using UnityEngine;
@@ -6,26 +8,52 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Runs before CombatPrototypeArena. It applies the global AUTO switch, prevents casts
-    /// below each skill's confirmed MP cost, and selects one tactical skill priority per frame.
+    /// Owns automatic skill scheduling. The arena's legacy one-skill priority loop is blocked,
+    /// ready skills are queued by the exact moment their cooldown finishes, and every skill that
+    /// starts ready may overlap in the opening volley.
     /// </summary>
     [DefaultExecutionOrder(-1200)]
     public sealed class GlobalSkillAutoGatePrototype : MonoBehaviour
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
-        private static readonly int[] HuntingPriority = { 2, 3, 1, 0 };
-        private static readonly int[] BossPriority = { 4, 6, 5, 7 };
+
+        private readonly bool[] waitingForCast = new bool[8];
+        private readonly long[] readySequence = new long[8];
+        private readonly bool[] readyThisFrame = new bool[8];
 
         private CombatPrototypeArena arena;
         private StageFlowController stageFlow;
         private SkillManagementPrototype skillManager;
+        private SpectacularPeanutSkillCombatPrototype spectacularCombat;
         private FieldInfo cooldownsField;
         private FieldInfo playerMpField;
+        private FieldInfo enemiesField;
+        private MethodInfo legacyAutoMethod;
+        private MethodInfo correctResourceMethod;
+        private MethodInfo executeSkillMethod;
+        private FieldInfo spectacularPreviousCooldownsField;
+        private FieldInfo spectacularArenaField;
+
+        private long nextReadySequence;
+        private int activeStart = -1;
+        private bool openingVolleyUsed;
 
         public bool UsesConfirmedMpCosts => true;
-        public bool UsesTacticalAutoPriority => true;
-        public string HuntingAutoPriority => "지맥꼬투리진 → 왕실 꼬투리 천개 → 낙화검우 → 껍질 회전참";
-        public string BossAutoPriority => "갑각해방 → 낙화귀근 → 땅콩 연환검 → 황금핵 천단";
+        public bool UsesCooldownCompletionOrder => true;
+        public bool AllowsOpeningSkillOverlap => true;
+        public bool UsesTacticalAutoPriority => false;
+        public string HuntingAutoPriority => "쿨타임 완료 순서 · 동시 완료 시 동시 발동";
+        public string BossAutoPriority => "쿨타임 완료 순서 · 동시 완료 시 동시 발동";
+        public int WaitingSkillCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < waitingForCast.Length; i++)
+                    if (waitingForCast[i]) count++;
+                return count;
+            }
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -41,47 +69,174 @@ namespace PeanutWarrior.Prototype
             arena = FindFirstObjectByType<CombatPrototypeArena>();
             stageFlow = FindFirstObjectByType<StageFlowController>();
             skillManager = FindFirstObjectByType<SkillManagementPrototype>();
+            spectacularCombat = FindFirstObjectByType<SpectacularPeanutSkillCombatPrototype>();
+
             Type arenaType = typeof(CombatPrototypeArena);
             cooldownsField = arenaType.GetField("skillCooldowns", PrivateInstance);
             playerMpField = arenaType.GetField("playerMp", PrivateInstance);
-            if (arena == null || stageFlow == null || skillManager == null || cooldownsField == null || playerMpField == null)
+            enemiesField = arenaType.GetField("enemies", PrivateInstance);
+            legacyAutoMethod = arenaType.GetMethod("TryUseAutomaticSkill", PrivateInstance);
+
+            Type spectacularType = typeof(SpectacularPeanutSkillCombatPrototype);
+            correctResourceMethod = spectacularType.GetMethod("CorrectResourceAndCooldown", PrivateInstance);
+            executeSkillMethod = spectacularType.GetMethod("ExecuteSkill", PrivateInstance);
+            spectacularPreviousCooldownsField = spectacularType.GetField("previousCooldowns", PrivateInstance);
+            spectacularArenaField = spectacularType.GetField("arena", PrivateInstance);
+
+            if (arena == null || stageFlow == null || skillManager == null || spectacularCombat == null ||
+                cooldownsField == null || playerMpField == null || enemiesField == null || legacyAutoMethod == null ||
+                correctResourceMethod == null || executeSkillMethod == null)
                 enabled = false;
         }
 
         private void Update()
         {
-            float[] cooldowns = cooldownsField.GetValue(arena) as float[];
+            if (!enabled) return;
+            float[] cooldowns = ReadCooldowns();
             if (cooldowns == null || cooldowns.Length < 8) return;
 
-            if (!skillManager.GlobalAutoEnabled)
+            int nextStart = stageFlow.Phase == StageFlowPhase.BossBattle ? 4 : 0;
+            if (nextStart != activeStart)
             {
-                for (int i = 0; i < cooldowns.Length; i++) cooldowns[i] = Mathf.Max(cooldowns[i], 0.2f);
-                return;
-            }
-
-            float currentMp = Convert.ToSingle(playerMpField.GetValue(arena));
-            int[] priority = stageFlow.Phase == StageFlowPhase.BossBattle ? BossPriority : HuntingPriority;
-            int selected = -1;
-
-            for (int i = 0; i < priority.Length; i++)
-            {
-                int index = priority[i];
-                bool ready = cooldowns[index] <= 0.05f;
-                bool affordable = currentMp >= skillManager.GetSkillMpCost(index);
-                if (ready && affordable)
+                activeStart = nextStart;
+                openingVolleyUsed = false;
+                for (int i = 0; i < waitingForCast.Length; i++)
                 {
-                    selected = index;
-                    break;
+                    waitingForCast[i] = false;
+                    readySequence[i] = 0L;
+                    readyThisFrame[i] = false;
                 }
             }
 
-            int start = stageFlow.Phase == StageFlowPhase.BossBattle ? 4 : 0;
-            for (int index = start; index < start + 4; index++)
+            Array.Clear(readyThisFrame, 0, readyThisFrame.Length);
+
+            if (!skillManager.GlobalAutoEnabled)
             {
-                bool affordable = currentMp >= skillManager.GetSkillMpCost(index);
-                if (!affordable || selected >= 0 && index < selected)
+                for (int index = activeStart; index < activeStart + 4; index++)
+                {
+                    waitingForCast[index] = false;
+                    readySequence[index] = 0L;
+                    cooldowns[index] = Mathf.Max(cooldowns[index], 0.2f);
+                }
+                return;
+            }
+
+            for (int index = activeStart; index < activeStart + 4; index++)
+            {
+                if (!waitingForCast[index] && cooldowns[index] <= 0.05f)
+                {
+                    waitingForCast[index] = true;
+                    readyThisFrame[index] = true;
+                    readySequence[index] = ++nextReadySequence;
+                }
+
+                if (waitingForCast[index])
                     cooldowns[index] = Mathf.Max(cooldowns[index], 0.2f);
             }
+        }
+
+        private void LateUpdate()
+        {
+            if (!enabled || !skillManager.GlobalAutoEnabled || activeStart < 0) return;
+            if (spectacularArenaField?.GetValue(spectacularCombat) == null) return;
+
+            float[] cooldowns = ReadCooldowns();
+            IList enemies = enemiesField.GetValue(arena) as IList;
+            object target = FindTarget(enemies, stageFlow.Phase == StageFlowPhase.BossBattle);
+            if (cooldowns == null || target == null) return;
+
+            var queue = new List<int>(4);
+            bool allFourWaiting = true;
+            bool allFourFresh = true;
+            for (int index = activeStart; index < activeStart + 4; index++)
+            {
+                if (waitingForCast[index]) queue.Add(index);
+                else allFourWaiting = false;
+                if (!readyThisFrame[index]) allFourFresh = false;
+            }
+
+            queue.Sort((left, right) => readySequence[left].CompareTo(readySequence[right]));
+            bool openingVolley = !openingVolleyUsed && allFourWaiting && allFourFresh;
+            float openingMp = ReadPlayerMp();
+            float openingCost = 0f;
+
+            for (int i = 0; i < queue.Count; i++)
+            {
+                int index = queue[i];
+                float cost = skillManager.GetSkillMpCost(index);
+                if (!openingVolley && ReadPlayerMp() + 0.001f < cost) continue;
+
+                if (openingVolley && ReadPlayerMp() < cost)
+                    playerMpField.SetValue(arena, cost);
+
+                if (!CastQueuedSkill(index, target, cooldowns)) continue;
+                waitingForCast[index] = false;
+                readySequence[index] = 0L;
+                openingCost += cost;
+            }
+
+            if (openingVolley)
+            {
+                openingVolleyUsed = true;
+                playerMpField.SetValue(arena, Mathf.Max(0f, openingMp - openingCost));
+            }
+        }
+
+        private bool CastQueuedSkill(int index, object target, float[] cooldowns)
+        {
+            float[] saved = new float[4];
+            for (int offset = 0; offset < 4; offset++)
+            {
+                int slot = activeStart + offset;
+                saved[offset] = cooldowns[slot];
+                cooldowns[slot] = slot == index ? 0f : 999f;
+            }
+
+            legacyAutoMethod.Invoke(arena, new[] { target, (object)activeStart });
+            bool cast = cooldowns[index] > 1f;
+
+            for (int offset = 0; offset < 4; offset++)
+            {
+                int slot = activeStart + offset;
+                if (slot != index) cooldowns[slot] = saved[offset];
+            }
+
+            if (!cast)
+            {
+                cooldowns[index] = saved[index - activeStart];
+                return false;
+            }
+
+            correctResourceMethod.Invoke(spectacularCombat, new object[] { index, cooldowns });
+            executeSkillMethod.Invoke(spectacularCombat, new object[] { index });
+
+            float[] previous = spectacularPreviousCooldownsField?.GetValue(spectacularCombat) as float[];
+            if (previous != null && index < previous.Length) previous[index] = cooldowns[index];
+            return true;
+        }
+
+        private float[] ReadCooldowns()
+        {
+            return cooldownsField?.GetValue(arena) as float[];
+        }
+
+        private float ReadPlayerMp()
+        {
+            return playerMpField == null || arena == null ? 0f : Convert.ToSingle(playerMpField.GetValue(arena));
+        }
+
+        private static object FindTarget(IList enemies, bool bossPhase)
+        {
+            if (enemies == null) return null;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                object enemy = enemies[i];
+                if (enemy == null) continue;
+                FieldInfo bossField = enemy.GetType().GetField("IsBoss", BindingFlags.Instance | BindingFlags.Public);
+                bool isBoss = bossField != null && Convert.ToBoolean(bossField.GetValue(enemy));
+                if (isBoss == bossPhase) return enemy;
+            }
+            return enemies.Count > 0 ? enemies[0] : null;
         }
     }
 }

@@ -1,5 +1,7 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using PeanutWarrior.Core;
 using UnityEngine;
@@ -7,154 +9,116 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Replaces the temporary circle presentation with an illustrated sprite atlas.
-    /// Combat data, damage, cooldowns and stage flow remain authoritative elsewhere.
+    /// Applies the illustrated atlas directly to RuntimeWorldViewPrototype's real
+    /// SpriteRenderers. This avoids the previous name-scanning overlay path, which
+    /// could fail silently and leave the original circles visible.
     /// </summary>
-    [DefaultExecutionOrder(17750)]
+    [DefaultExecutionOrder(25000)]
     public sealed class ProceduralBattleArtPrototype : MonoBehaviour
     {
+        private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+        private const BindingFlags PublicInstance = BindingFlags.Instance | BindingFlags.Public;
         private const int AtlasColumns = 6;
         private const int AtlasRows = 4;
         private const float WorldTileSize = 1.45f;
 
-        private enum UnitKind
-        {
-            Hero = 0,
-            CompanionBlade = 1,
-            CompanionGuard = 2,
-            CompanionMage = 3,
-            Mold = 4,
-            Weevil = 5,
-            Predator = 6,
-            Mycelium = 7,
-            Invader = 8,
-            BossMold = 9,
-            BossBeetle = 10,
-            BossPortal = 11
-        }
-
-        private sealed class IllustratedUnit
-        {
-            public Transform Root;
-            public Transform Visual;
-            public SpriteRenderer Renderer;
-            public SpriteRenderer Aura;
-            public UnitKind Kind;
-            public float Seed;
-            public Vector3 BaseScale;
-        }
-
-        private readonly Dictionary<Transform, IllustratedUnit> units =
-            new Dictionary<Transform, IllustratedUnit>();
-        private readonly List<Transform> staleUnits = new List<Transform>();
-        private readonly List<IllustratedUnit> companions = new List<IllustratedUnit>();
-        private readonly Sprite[] atlasSprites = new Sprite[24];
-
+        private RuntimeWorldViewPrototype worldView;
         private StageFlowController stageFlow;
-        private Transform worldRoot;
-        private Transform environmentRoot;
-        private Transform heroRoot;
-        private Camera worldCamera;
+        private FieldInfo playerViewField;
+        private FieldInfo enemyViewsField;
+        private FieldInfo worldRootField;
+
+        private readonly Sprite[] atlasSprites = new Sprite[24];
+        private readonly HashSet<int> cleanedRoots = new HashSet<int>();
+        private readonly List<Transform> companions = new List<Transform>();
+
         private Texture2D atlasTexture;
-        private float scanTimer;
-        private float ambientTimer;
+        private GameObject worldRoot;
+        private Transform environmentRoot;
+        private Transform playerRoot;
+        private Camera worldCamera;
         private int currentTheme = -1;
-        private bool initialized;
+        private bool atlasReady;
+        private bool reflectionReady;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
         {
             if (FindFirstObjectByType<ProceduralBattleArtPrototype>() != null) return;
-            GameObject root = new GameObject("Peanut Illustrated Battle Art");
+            GameObject root = new GameObject("Peanut Direct Battle Art Binder");
             DontDestroyOnLoad(root);
             root.AddComponent<ProceduralBattleArtPrototype>();
         }
 
-        private void Start()
+        private void Awake()
         {
-            stageFlow = FindFirstObjectByType<StageFlowController>();
-            StringBuilder atlasBase64 = new StringBuilder(90112);
+            atlasReady = LoadAtlas();
+            if (!atlasReady)
+            {
+                Debug.LogError("[PeanutArt] Illustrated atlas could not be loaded. Original circles will remain visible.");
+                enabled = false;
+            }
+        }
+
+        private void LateUpdate()
+        {
+            if (!atlasReady) return;
+            if (!ResolveRuntimeView()) return;
+
+            ApplyPlayerArt();
+            ApplyEnemyArt();
+            EnsureCompanions();
+            AnimateCompanions();
+            ApplyStageTheme();
+        }
+
+        private bool LoadAtlas()
+        {
+            StringBuilder encoded = new StringBuilder(90112);
             for (int index = 0; index < 8; index++)
             {
-                TextAsset chunk = Resources.Load<TextAsset>(
-                    $"PeanutWarrior/AtlasChunks/peanut_battle_atlas_{index:00}");
+                string path = $"PeanutWarrior/AtlasChunks/peanut_battle_atlas_{index:00}";
+                TextAsset chunk = Resources.Load<TextAsset>(path);
                 if (chunk == null)
                 {
-                    Debug.LogError($"Peanut battle atlas chunk {index:00} was not found.");
-                    enabled = false;
-                    return;
+                    Debug.LogError($"[PeanutArt] Missing Resources asset: {path}");
+                    return false;
                 }
-                atlasBase64.Append(chunk.text.Trim());
+                encoded.Append(chunk.text.Trim());
             }
 
             try
             {
-                byte[] imageBytes = Convert.FromBase64String(atlasBase64.ToString());
-                atlasTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                if (!atlasTexture.LoadImage(imageBytes, false))
-                    throw new InvalidOperationException("Texture2D.LoadImage returned false.");
+                byte[] bytes = System.Convert.FromBase64String(encoded.ToString());
+                atlasTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+                {
+                    name = "Peanut Battle Atlas"
+                };
+
+                if (!atlasTexture.LoadImage(bytes, false))
+                {
+                    Debug.LogError("[PeanutArt] Texture2D.LoadImage returned false.");
+                    return false;
+                }
             }
-            catch (Exception exception)
+            catch (System.Exception exception)
             {
-                Debug.LogError($"Failed to decode the Peanut battle atlas: {exception.Message}");
-                enabled = false;
-                return;
+                Debug.LogError($"[PeanutArt] Atlas decode failed: {exception}");
+                return false;
             }
 
-            atlasTexture.name = "Peanut Illustrated Battle Atlas";
             atlasTexture.filterMode = FilterMode.Bilinear;
             atlasTexture.wrapMode = TextureWrapMode.Clamp;
-            CreateAtlasSprites();
-            initialized = true;
 
-            if (stageFlow != null)
-                stageFlow.StateChanged += HandleStageChanged;
-        }
-
-        private void OnDestroy()
-        {
-            if (stageFlow != null)
-                stageFlow.StateChanged -= HandleStageChanged;
-        }
-
-        private void Update()
-        {
-            if (!initialized) return;
-
-            scanTimer -= Time.deltaTime;
-            if (scanTimer <= 0f)
-            {
-                scanTimer = 0.25f;
-                ResolveWorld();
-                ScanBattlefield();
-                EnsureCompanions();
-                RefreshTheme();
-            }
-
-            AnimateUnits();
-            AnimateCompanions();
-            AnimateEnvironment();
-        }
-
-        private void ResolveWorld()
-        {
-            if (worldRoot != null) return;
-
-            GameObject found = GameObject.Find("Runtime 2D World");
-            if (found == null) return;
-
-            worldRoot = found.transform;
-            worldCamera = Camera.main;
-            environmentRoot = new GameObject("Illustrated Stage Environment").transform;
-            environmentRoot.SetParent(worldRoot, false);
-        }
-
-        private void CreateAtlasSprites()
-        {
             int tileWidth = atlasTexture.width / AtlasColumns;
             int tileHeight = atlasTexture.height / AtlasRows;
-            float pixelsPerUnit = tileWidth / WorldTileSize;
+            if (tileWidth <= 0 || tileHeight <= 0)
+            {
+                Debug.LogError($"[PeanutArt] Invalid atlas size: {atlasTexture.width}x{atlasTexture.height}");
+                return false;
+            }
 
+            float pixelsPerUnit = tileWidth / WorldTileSize;
             for (int index = 0; index < atlasSprites.Length; index++)
             {
                 int column = index % AtlasColumns;
@@ -169,204 +133,198 @@ namespace PeanutWarrior.Prototype
                     pixelsPerUnit,
                     0,
                     SpriteMeshType.FullRect);
-                atlasSprites[index].name = $"PeanutBattleArt_{index:00}";
+                atlasSprites[index].name = $"PeanutBattleSprite_{index:00}";
             }
+
+            Debug.Log($"[PeanutArt] Atlas loaded: {atlasTexture.width}x{atlasTexture.height}, 24 sprites ready.");
+            return true;
         }
 
-        private void ScanBattlefield()
+        private bool ResolveRuntimeView()
         {
-            if (worldRoot == null) return;
-
-            staleUnits.Clear();
-            foreach (Transform key in units.Keys)
+            if (worldView == null)
             {
-                if (key == null) staleUnits.Add(key);
+                worldView = FindFirstObjectByType<RuntimeWorldViewPrototype>();
+                stageFlow = FindFirstObjectByType<StageFlowController>();
+                reflectionReady = false;
             }
-            for (int i = 0; i < staleUnits.Count; i++)
-                units.Remove(staleUnits[i]);
 
-            Transform[] all = worldRoot.GetComponentsInChildren<Transform>(true);
-            for (int i = 0; i < all.Length; i++)
+            if (worldView == null) return false;
+
+            if (!reflectionReady)
             {
-                Transform candidate = all[i];
-                if (candidate == null || units.ContainsKey(candidate)) continue;
+                System.Type type = typeof(RuntimeWorldViewPrototype);
+                playerViewField = type.GetField("playerView", PrivateInstance);
+                enemyViewsField = type.GetField("enemyViews", PrivateInstance);
+                worldRootField = type.GetField("worldRoot", PrivateInstance);
 
-                if (candidate.name == "Peanut Warrior")
+                if (playerViewField == null || enemyViewsField == null || worldRootField == null)
                 {
-                    heroRoot = candidate;
-                    Decorate(candidate, UnitKind.Hero);
+                    Debug.LogError("[PeanutArt] RuntimeWorldViewPrototype fields were not found.");
+                    enabled = false;
+                    return false;
+                }
+
+                reflectionReady = true;
+            }
+
+            worldRoot = worldRootField.GetValue(worldView) as GameObject;
+            if (worldRoot == null) return false;
+
+            if (environmentRoot == null)
+            {
+                Transform existing = worldRoot.transform.Find("Illustrated Stage Environment");
+                if (existing != null) Destroy(existing.gameObject);
+
+                environmentRoot = new GameObject("Direct Illustrated Stage Environment").transform;
+                environmentRoot.SetParent(worldRoot.transform, false);
+                worldCamera = Camera.main;
+            }
+
+            return true;
+        }
+
+        private void ApplyPlayerArt()
+        {
+            object view = playerViewField.GetValue(worldView);
+            SpriteRenderer body = ReadBody(view);
+            if (body == null) return;
+
+            playerRoot = body.transform.parent;
+            ApplySprite(body, atlasSprites[0], 1.22f, false);
+            MoveHud(playerRoot, 1.02f, 0.76f);
+        }
+
+        private void ApplyEnemyArt()
+        {
+            IDictionary views = enemyViewsField.GetValue(worldView) as IDictionary;
+            if (views == null) return;
+
+            int index = 0;
+            foreach (DictionaryEntry pair in views)
+            {
+                object view = pair.Value;
+                SpriteRenderer body = ReadBody(view);
+                if (body == null)
+                {
+                    index++;
                     continue;
                 }
 
-                if (candidate.name == "Monster View")
-                {
-                    Decorate(candidate, ResolveMonsterKind(ReadLabel(candidate)));
-                    continue;
-                }
+                bool boss = ReadBool(view, "IsBoss");
+                TextMesh label = ReadLabel(view);
+                string labelText = label != null ? label.text : string.Empty;
 
-                if (candidate.name == "Boss View")
-                    Decorate(candidate, ResolveBossKind());
+                int spriteIndex = boss
+                    ? ResolveBossSpriteIndex()
+                    : ResolveMonsterSpriteIndex(labelText, index);
+
+                ApplySprite(body, atlasSprites[spriteIndex], boss ? 1.20f : 1.02f, boss);
+                MoveHud(body.transform.parent, boss ? 1.30f : 0.92f, boss ? 1.02f : 0.69f);
+                index++;
             }
         }
 
-        private void Decorate(Transform root, UnitKind kind)
+        private void ApplySprite(SpriteRenderer body, Sprite sprite, float visualScale, bool boss)
         {
-            Transform oldBody = root.Find("Body");
-            if (oldBody != null)
-                oldBody.gameObject.SetActive(false);
+            if (body == null || sprite == null) return;
 
-            GameObject visualObject = new GameObject("Illustrated Visual");
-            visualObject.transform.SetParent(root, false);
-            visualObject.transform.localPosition = new Vector3(0f, 0.08f, 0f);
+            Transform root = body.transform.parent;
+            if (root != null)
+                RemoveLegacyOverlay(root);
 
-            SpriteRenderer renderer = visualObject.AddComponent<SpriteRenderer>();
-            renderer.sprite = atlasSprites[(int)kind];
-            renderer.sortingOrder = IsBoss(kind) ? 6 : 5;
+            body.gameObject.SetActive(true);
+            body.sprite = sprite;
+            body.color = Color.white;
+            body.sortingOrder = boss ? 6 : 5;
+            body.transform.localPosition = new Vector3(0f, 0.08f, 0f);
+            body.transform.localScale = Vector3.one * visualScale;
 
-            Vector3 scale = ScaleFor(kind);
-            visualObject.transform.localScale = scale;
+            Transform highlight = body.transform.Find("Highlight");
+            if (highlight != null) highlight.gameObject.SetActive(false);
+        }
 
-            SpriteRenderer aura = null;
-            if (kind == UnitKind.Hero || IsBoss(kind))
+        private void RemoveLegacyOverlay(Transform root)
+        {
+            if (root == null || !cleanedRoots.Add(root.GetInstanceID())) return;
+
+            string[] names = { "Procedural Visual", "Illustrated Visual", "Illustrated Aura" };
+            for (int i = 0; i < names.Length; i++)
             {
-                GameObject auraObject = new GameObject("Illustrated Aura");
-                auraObject.transform.SetParent(root, false);
-                auraObject.transform.localPosition = Vector3.zero;
-                aura = auraObject.AddComponent<SpriteRenderer>();
-                aura.sprite = atlasSprites[kind == UnitKind.Hero ? 12 : ThemeSkillIndex()];
-                aura.color = kind == UnitKind.Hero
-                    ? new Color(1f, 0.86f, 0.32f, 0.28f)
-                    : new Color(1f, 1f, 1f, 0.18f);
-                aura.sortingOrder = 1;
-                auraObject.transform.localScale = kind == UnitKind.Hero
-                    ? Vector3.one * 1.25f
-                    : Vector3.one * 1.55f;
+                Transform child = root.Find(names[i]);
+                if (child != null) Destroy(child.gameObject);
             }
+        }
 
-            units[root] = new IllustratedUnit
-            {
-                Root = root,
-                Visual = visualObject.transform,
-                Renderer = renderer,
-                Aura = aura,
-                Kind = kind,
-                Seed = UnityEngine.Random.Range(0f, 10f),
-                BaseScale = scale
-            };
+        private void MoveHud(Transform root, float labelY, float healthY)
+        {
+            if (root == null) return;
+
+            Transform label = root.Find("Label");
+            if (label != null)
+                label.localPosition = new Vector3(0f, labelY, 0f);
+
+            Transform health = root.Find("Health Back");
+            if (health != null)
+                health.localPosition = new Vector3(0f, healthY, 0f);
+
+            Transform shadow = root.Find("Shadow");
+            if (shadow != null)
+                shadow.localPosition = new Vector3(0f, -0.55f, 0f);
         }
 
         private void EnsureCompanions()
         {
-            if (worldRoot == null || heroRoot == null || companions.Count > 0) return;
+            if (worldRoot == null || playerRoot == null || companions.Count == 3) return;
 
-            CreateCompanion(UnitKind.CompanionBlade);
-            CreateCompanion(UnitKind.CompanionGuard);
-            CreateCompanion(UnitKind.CompanionMage);
-        }
-
-        private void CreateCompanion(UnitKind kind)
-        {
-            GameObject root = new GameObject($"Support Peanut {kind}");
-            root.transform.SetParent(worldRoot, false);
-
-            GameObject visual = new GameObject("Illustrated Visual");
-            visual.transform.SetParent(root.transform, false);
-            SpriteRenderer renderer = visual.AddComponent<SpriteRenderer>();
-            renderer.sprite = atlasSprites[(int)kind];
-            renderer.sortingOrder = 5;
-
-            Vector3 scale = Vector3.one * 0.70f;
-            visual.transform.localScale = scale;
-
-            companions.Add(new IllustratedUnit
+            for (int i = companions.Count; i < 3; i++)
             {
-                Root = root.transform,
-                Visual = visual.transform,
-                Renderer = renderer,
-                Kind = kind,
-                Seed = UnityEngine.Random.Range(0f, 10f),
-                BaseScale = scale
-            });
-        }
+                GameObject companion = new GameObject($"Illustrated Support Peanut {i + 1}");
+                companion.transform.SetParent(worldRoot.transform, false);
 
-        private void AnimateUnits()
-        {
-            foreach (IllustratedUnit unit in units.Values)
-            {
-                if (unit == null || unit.Root == null || unit.Visual == null) continue;
-
-                float speed = IsBoss(unit.Kind) ? 2.2f : 4.2f;
-                float bob = Mathf.Sin(Time.time * speed + unit.Seed) *
-                    (IsBoss(unit.Kind) ? 0.035f : 0.025f);
-                float breathe = 1f + Mathf.Sin(Time.time * (speed * 0.72f) + unit.Seed) * 0.018f;
-
-                unit.Visual.localPosition = new Vector3(0f, 0.08f + bob, 0f);
-                unit.Visual.localScale = unit.BaseScale * breathe;
-                unit.Visual.localRotation = Quaternion.Euler(
-                    0f,
-                    0f,
-                    Mathf.Sin(Time.time * speed * 0.45f + unit.Seed) * 1.2f);
-
-                Transform oldBody = unit.Root.Find("Body");
-                SpriteRenderer oldRenderer = oldBody != null
-                    ? oldBody.GetComponent<SpriteRenderer>()
-                    : null;
-                if (oldRenderer != null)
-                    unit.Renderer.flipX = oldRenderer.flipX;
-
-                if (unit.Aura != null)
-                {
-                    unit.Aura.transform.Rotate(0f, 0f,
-                        (unit.Kind == UnitKind.Hero ? -22f : 14f) * Time.deltaTime);
-                    float pulse = 1f + Mathf.Sin(Time.time * 3.4f + unit.Seed) * 0.08f;
-                    unit.Aura.transform.localScale =
-                        Vector3.one * (unit.Kind == UnitKind.Hero ? 1.25f : 1.55f) * pulse;
-                }
+                SpriteRenderer renderer = companion.AddComponent<SpriteRenderer>();
+                renderer.sprite = atlasSprites[i + 1];
+                renderer.color = Color.white;
+                renderer.sortingOrder = 5;
+                companion.transform.localScale = Vector3.one * 0.72f;
+                companions.Add(companion.transform);
             }
         }
 
         private void AnimateCompanions()
         {
-            if (heroRoot == null || companions.Count != 3) return;
+            if (playerRoot == null || companions.Count != 3) return;
 
             Vector3[] offsets =
             {
-                new Vector3(-1.15f, -0.58f, 0f),
-                new Vector3(0f, -1.00f, 0f),
-                new Vector3(1.15f, -0.58f, 0f)
+                new Vector3(-1.20f, -0.62f, 0f),
+                new Vector3(0f, -1.02f, 0f),
+                new Vector3(1.20f, -0.62f, 0f)
             };
 
             for (int i = 0; i < companions.Count; i++)
             {
-                IllustratedUnit companion = companions[i];
-                if (companion.Root == null) continue;
+                Transform companion = companions[i];
+                if (companion == null) continue;
 
-                float orbit = Time.time * 0.42f + (i * 2.094f);
-                Vector3 target = heroRoot.position + offsets[i] +
-                    new Vector3(Mathf.Cos(orbit) * 0.10f, Mathf.Sin(orbit * 1.7f) * 0.08f, 0f);
+                float phase = Time.time * 0.45f + i * 2.094f;
+                Vector3 target = playerRoot.position + offsets[i] +
+                    new Vector3(Mathf.Cos(phase) * 0.08f, Mathf.Sin(phase * 1.6f) * 0.07f, 0f);
 
-                companion.Root.position = Vector3.Lerp(
-                    companion.Root.position,
+                companion.position = Vector3.Lerp(
+                    companion.position,
                     target,
-                    1f - Mathf.Exp(-7f * Time.deltaTime));
+                    1f - Mathf.Exp(-8f * Time.deltaTime));
 
-                companion.Visual.localScale = companion.BaseScale *
-                    (1f + Mathf.Sin(Time.time * 4.5f + companion.Seed) * 0.025f);
-                companion.Visual.localRotation = Quaternion.Euler(
-                    0f,
-                    0f,
-                    Mathf.Sin(Time.time * 2.8f + companion.Seed) * 2f);
+                float breathe = 1f + Mathf.Sin(Time.time * 4.2f + i) * 0.025f;
+                companion.localScale = Vector3.one * 0.72f * breathe;
+                companion.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(phase) * 2f);
             }
         }
 
-        private void HandleStageChanged()
+        private void ApplyStageTheme()
         {
-            currentTheme = -1;
-        }
-
-        private void RefreshTheme()
-        {
-            if (worldRoot == null || environmentRoot == null) return;
+            if (environmentRoot == null) return;
 
             int theme = stageFlow == null ? 0 : Mathf.Abs(stageFlow.World - 1) % 4;
             if (theme == currentTheme) return;
@@ -375,15 +333,41 @@ namespace PeanutWarrior.Prototype
             for (int i = environmentRoot.childCount - 1; i >= 0; i--)
                 Destroy(environmentRoot.GetChild(i).gameObject);
 
-            ApplyThemePalette(theme);
+            Color[] cameraColors =
+            {
+                new Color(0.10f, 0.22f, 0.09f),
+                new Color(0.15f, 0.09f, 0.12f),
+                new Color(0.07f, 0.12f, 0.13f),
+                new Color(0.06f, 0.035f, 0.15f)
+            };
+
+            if (worldCamera == null) worldCamera = Camera.main;
+            if (worldCamera != null) worldCamera.backgroundColor = cameraColors[theme];
+
+            Transform floor = worldRoot.transform.Find("Peanut Field");
+            if (floor != null)
+            {
+                SpriteRenderer floorRenderer = floor.GetComponent<SpriteRenderer>();
+                if (floorRenderer != null)
+                {
+                    Color[] floorColors =
+                    {
+                        new Color(0.28f, 0.45f, 0.18f),
+                        new Color(0.24f, 0.16f, 0.16f),
+                        new Color(0.13f, 0.20f, 0.20f),
+                        new Color(0.12f, 0.06f, 0.24f)
+                    };
+                    floorRenderer.color = floorColors[theme];
+                }
+            }
 
             Vector3[] positions =
             {
-                new Vector3(-7.1f, -3.25f, 0f),
-                new Vector3(-4.65f, 2.95f, 0f),
-                new Vector3(-1.9f, -3.35f, 0f),
-                new Vector3(1.2f, 3.05f, 0f),
-                new Vector3(4.1f, -3.25f, 0f),
+                new Vector3(-7.1f, -3.15f, 0f),
+                new Vector3(-5.2f, 2.9f, 0f),
+                new Vector3(-2.4f, -3.25f, 0f),
+                new Vector3(2.2f, 3.0f, 0f),
+                new Vector3(5.0f, -3.15f, 0f),
                 new Vector3(7.0f, 2.75f, 0f)
             };
 
@@ -392,137 +376,50 @@ namespace PeanutWarrior.Prototype
                 GameObject decor = new GameObject($"Theme Decor {i + 1}");
                 decor.transform.SetParent(environmentRoot, false);
                 decor.transform.localPosition = positions[i];
-                decor.transform.localRotation =
-                    Quaternion.Euler(0f, 0f, i % 2 == 0 ? -4f : 4f);
-                decor.transform.localScale =
-                    Vector3.one * (i % 3 == 0 ? 1.25f : 0.92f);
+                decor.transform.localScale = Vector3.one * (i % 3 == 0 ? 1.22f : 0.92f);
 
                 SpriteRenderer renderer = decor.AddComponent<SpriteRenderer>();
                 renderer.sprite = atlasSprites[20 + theme];
-                renderer.color = new Color(1f, 1f, 1f, i < 2 ? 0.72f : 0.92f);
-                renderer.sortingOrder = -16 + (i % 2);
-            }
-
-            GameObject centerpiece = new GameObject("Theme Centerpiece");
-            centerpiece.transform.SetParent(environmentRoot, false);
-            centerpiece.transform.localPosition = new Vector3(0f, 0.3f, 0f);
-            centerpiece.transform.localScale = Vector3.one * 2.6f;
-            SpriteRenderer centerRenderer = centerpiece.AddComponent<SpriteRenderer>();
-            centerRenderer.sprite = atlasSprites[20 + theme];
-            centerRenderer.color = new Color(1f, 1f, 1f, 0.13f);
-            centerRenderer.sortingOrder = -18;
-        }
-
-        private void ApplyThemePalette(int theme)
-        {
-            if (worldCamera == null) worldCamera = Camera.main;
-            if (worldCamera != null)
-            {
-                Color[] cameraColors =
-                {
-                    new Color(0.12f, 0.24f, 0.10f),
-                    new Color(0.16f, 0.12f, 0.14f),
-                    new Color(0.08f, 0.13f, 0.14f),
-                    new Color(0.07f, 0.05f, 0.16f)
-                };
-                worldCamera.backgroundColor = cameraColors[theme];
-            }
-
-            GameObject floor = GameObject.Find("Peanut Field");
-            if (floor != null)
-            {
-                SpriteRenderer renderer = floor.GetComponent<SpriteRenderer>();
-                if (renderer != null)
-                {
-                    Color[] floorColors =
-                    {
-                        new Color(0.27f, 0.43f, 0.17f),
-                        new Color(0.25f, 0.20f, 0.18f),
-                        new Color(0.16f, 0.23f, 0.22f),
-                        new Color(0.13f, 0.08f, 0.25f)
-                    };
-                    renderer.color = floorColors[theme];
-                }
-            }
-
-            GameObject[] patches = GameObject.FindGameObjectsWithTag("Untagged");
-            for (int i = 0; i < patches.Length; i++)
-            {
-                if (patches[i].name != "Field Patch") continue;
-                SpriteRenderer renderer = patches[i].GetComponent<SpriteRenderer>();
-                if (renderer == null) continue;
-                renderer.color = theme == 0
-                    ? new Color(0.53f, 0.68f, 0.26f, 0.40f)
-                    : new Color(0f, 0f, 0f, 0f);
+                renderer.color = new Color(1f, 1f, 1f, i < 2 ? 0.70f : 0.92f);
+                renderer.sortingOrder = -16;
             }
         }
 
-        private void AnimateEnvironment()
+        private int ResolveBossSpriteIndex()
         {
-            if (environmentRoot == null) return;
-
-            ambientTimer += Time.deltaTime;
-            for (int i = 0; i < environmentRoot.childCount; i++)
-            {
-                Transform child = environmentRoot.GetChild(i);
-                if (child == null) continue;
-                float sway = Mathf.Sin(ambientTimer * 0.7f + i * 1.3f) * 1.5f;
-                child.localRotation = Quaternion.Euler(0f, 0f, sway);
-            }
+            int world = stageFlow == null ? 1 : stageFlow.World;
+            return 9 + Mathf.Abs(world - 1) % 3;
         }
 
-        private UnitKind ResolveMonsterKind(string label)
+        private static int ResolveMonsterSpriteIndex(string label, int fallback)
         {
-            if (label.Contains("곰팡이")) return UnitKind.Mold;
-            if (label.Contains("바구미")) return UnitKind.Weevil;
-            if (label.Contains("포식")) return UnitKind.Predator;
-            if (label.Contains("균사")) return UnitKind.Mycelium;
-            return UnitKind.Invader;
+            if (label.Contains("곰팡이")) return 4;
+            if (label.Contains("바구미")) return 5;
+            if (label.Contains("포식")) return 6;
+            if (label.Contains("균사")) return 7;
+            if (label.Contains("침공")) return 8;
+            return 4 + Mathf.Abs(fallback) % 5;
         }
 
-        private UnitKind ResolveBossKind()
+        private static SpriteRenderer ReadBody(object view)
         {
-            int theme = stageFlow == null ? 0 : Mathf.Abs(stageFlow.World - 1) % 4;
-            if (theme == 0 || theme == 1) return UnitKind.BossMold;
-            if (theme == 2) return UnitKind.BossBeetle;
-            return UnitKind.BossPortal;
+            if (view == null) return null;
+            FieldInfo field = view.GetType().GetField("Body", PublicInstance);
+            return field != null ? field.GetValue(view) as SpriteRenderer : null;
         }
 
-        private int ThemeSkillIndex()
+        private static TextMesh ReadLabel(object view)
         {
-            int theme = stageFlow == null ? 0 : Mathf.Abs(stageFlow.World - 1) % 4;
-            return 16 + theme;
+            if (view == null) return null;
+            FieldInfo field = view.GetType().GetField("Label", PublicInstance);
+            return field != null ? field.GetValue(view) as TextMesh : null;
         }
 
-        private static string ReadLabel(Transform root)
+        private static bool ReadBool(object view, string fieldName)
         {
-            Transform labelTransform = root.Find("Label");
-            TextMesh label = labelTransform != null
-                ? labelTransform.GetComponent<TextMesh>()
-                : null;
-            return label != null ? label.text : string.Empty;
-        }
-
-        private static bool IsBoss(UnitKind kind)
-        {
-            return kind == UnitKind.BossMold ||
-                   kind == UnitKind.BossBeetle ||
-                   kind == UnitKind.BossPortal;
-        }
-
-        private static Vector3 ScaleFor(UnitKind kind)
-        {
-            switch (kind)
-            {
-                case UnitKind.Hero:
-                    return Vector3.one * 1.22f;
-                case UnitKind.BossMold:
-                case UnitKind.BossBeetle:
-                case UnitKind.BossPortal:
-                    return Vector3.one * 1.58f;
-                default:
-                    return Vector3.one * 0.92f;
-            }
+            if (view == null) return false;
+            FieldInfo field = view.GetType().GetField(fieldName, PublicInstance);
+            return field != null && System.Convert.ToBoolean(field.GetValue(view));
         }
     }
 }

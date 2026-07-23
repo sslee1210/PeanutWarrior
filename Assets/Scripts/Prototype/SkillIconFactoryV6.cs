@@ -9,24 +9,23 @@ namespace PeanutWarrior.Prototype
         public static Sprite Create(int index)
         {
             Texture2D texture = new Texture2D(Size, Size, TextureFormat.RGBA32, false);
-            texture.name = "PeanutSkillIcon" + index;
+            texture.name = "PeanutSpectacularSkillIcon" + index;
             texture.filterMode = FilterMode.Bilinear;
             Color clear = new Color(1f, 1f, 1f, 0f);
             for (int y = 0; y < Size; y++)
-                for (int x = 0; x < Size; x++)
-                    texture.SetPixel(x, y, clear);
+                for (int x = 0; x < Size; x++) texture.SetPixel(x, y, clear);
 
-            Ring(texture, 64, 64, 54, 3, 0.42f);
-            switch (index)
+            Ring(texture, 64, 64, 55, 3, 0.38f);
+            switch (Mathf.Clamp(index, 0, 7))
             {
-                case 0: Whirlwind(texture); break;
-                case 1: Barrage(texture); break;
-                case 2: TrackingDance(texture); break;
-                case 3: HeavenEarthCut(texture); break;
-                case 4: ComboSlash(texture); break;
-                case 5: VitalCut(texture); break;
-                case 6: ElementMark(texture); break;
-                default: DimensionEnd(texture); break;
+                case 0: ShellCyclone(texture); break;
+                case 1: FallingFlowerRain(texture); break;
+                case 2: LeylinePods(texture); break;
+                case 3: RoyalPodArmory(texture); break;
+                case 4: CarapaceRelease(texture); break;
+                case 5: PeanutChainSword(texture); break;
+                case 6: FallenFlowerRoot(texture); break;
+                default: GoldenCoreHeavenSever(texture); break;
             }
 
             texture.Apply();
@@ -37,110 +36,147 @@ namespace PeanutWarrior.Prototype
         {
             Color[] colors =
             {
-                new Color(0.15f, 0.58f, 0.34f),
-                new Color(0.14f, 0.48f, 0.72f),
-                new Color(0.22f, 0.64f, 0.62f),
-                new Color(0.74f, 0.56f, 0.12f),
-                new Color(0.82f, 0.24f, 0.16f),
-                new Color(0.72f, 0.18f, 0.24f),
-                new Color(0.52f, 0.30f, 0.80f),
-                new Color(0.28f, 0.18f, 0.48f)
+                new Color(0.88f, 0.64f, 0.12f),
+                new Color(0.96f, 0.48f, 0.25f),
+                new Color(0.30f, 0.72f, 0.32f),
+                new Color(0.96f, 0.72f, 0.10f),
+                new Color(0.82f, 0.38f, 0.13f),
+                new Color(0.88f, 0.20f, 0.18f),
+                new Color(0.56f, 0.30f, 0.82f),
+                new Color(0.98f, 0.78f, 0.16f)
             };
             return colors[Mathf.Clamp(index, 0, colors.Length - 1)];
         }
 
-        private static void Whirlwind(Texture2D texture)
+        private static void ShellCyclone(Texture2D texture)
         {
-            for (int arm = 0; arm < 3; arm++)
-            {
-                float offset = arm * Mathf.PI * 2f / 3f;
-                Vector2 previous = Vector2.zero;
-                for (int step = 0; step <= 34; step++)
-                {
-                    float t = step / 34f;
-                    float angle = offset + t * Mathf.PI * 1.55f;
-                    float radius = 8f + t * 38f;
-                    Vector2 point = new Vector2(64f + Mathf.Cos(angle) * radius, 64f + Mathf.Sin(angle) * radius);
-                    if (step > 0) Line(texture, previous, point, 3, 1f);
-                    previous = point;
-                }
-            }
-            FilledCircle(texture, 64, 64, 6, 1f);
-        }
-
-        private static void Barrage(Texture2D texture)
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                float shift = (i - 2) * 14f;
-                Line(texture, new Vector2(30f + shift, 92f), new Vector2(76f + shift, 36f), 4, 1f);
-                Line(texture, new Vector2(71f + shift, 36f), new Vector2(83f + shift, 31f), 2, 0.85f);
-            }
-        }
-
-        private static void TrackingDance(Texture2D texture)
-        {
-            Ring(texture, 64, 64, 25, 3, 0.95f);
-            Ring(texture, 64, 64, 10, 3, 0.95f);
-            Line(texture, new Vector2(24f, 90f), new Vector2(91f, 34f), 5, 1f);
-            Line(texture, new Vector2(91f, 34f), new Vector2(82f, 35f), 3, 1f);
-            Line(texture, new Vector2(91f, 34f), new Vector2(89f, 44f), 3, 1f);
-        }
-
-        private static void HeavenEarthCut(Texture2D texture)
-        {
-            Line(texture, new Vector2(64f, 22f), new Vector2(64f, 106f), 6, 1f);
-            Line(texture, new Vector2(24f, 64f), new Vector2(104f, 64f), 6, 1f);
-            Line(texture, new Vector2(42f, 28f), new Vector2(86f, 100f), 2, 0.65f);
-            Line(texture, new Vector2(86f, 28f), new Vector2(42f, 100f), 2, 0.65f);
-        }
-
-        private static void ComboSlash(Texture2D texture)
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                float shift = i * 13f;
-                Line(texture, new Vector2(26f + shift, 102f), new Vector2(66f + shift, 28f), 5, 1f);
-            }
-            Line(texture, new Vector2(30f, 44f), new Vector2(97f, 84f), 3, 0.72f);
-        }
-
-        private static void VitalCut(Texture2D texture)
-        {
-            Ring(texture, 64, 64, 30, 3, 0.95f);
-            Ring(texture, 64, 64, 12, 3, 0.95f);
-            Line(texture, new Vector2(64f, 20f), new Vector2(64f, 42f), 3, 0.9f);
-            Line(texture, new Vector2(64f, 86f), new Vector2(64f, 108f), 3, 0.9f);
-            Line(texture, new Vector2(20f, 64f), new Vector2(42f, 64f), 3, 0.9f);
-            Line(texture, new Vector2(86f, 64f), new Vector2(108f, 64f), 3, 0.9f);
-            Line(texture, new Vector2(31f, 96f), new Vector2(97f, 31f), 5, 1f);
-        }
-
-        private static void ElementMark(Texture2D texture)
-        {
-            Line(texture, new Vector2(64f, 22f), new Vector2(102f, 64f), 5, 1f);
-            Line(texture, new Vector2(102f, 64f), new Vector2(64f, 106f), 5, 1f);
-            Line(texture, new Vector2(64f, 106f), new Vector2(26f, 64f), 5, 1f);
-            Line(texture, new Vector2(26f, 64f), new Vector2(64f, 22f), 5, 1f);
-            FilledCircle(texture, 64, 38, 7, 1f);
-            FilledCircle(texture, 88, 64, 7, 1f);
-            FilledCircle(texture, 64, 90, 7, 1f);
-            FilledCircle(texture, 40, 64, 7, 1f);
-            Ring(texture, 64, 64, 13, 3, 1f);
-        }
-
-        private static void DimensionEnd(Texture2D texture)
-        {
-            Ring(texture, 64, 64, 37, 5, 1f);
-            Ring(texture, 64, 64, 21, 3, 0.82f);
+            Ring(texture, 64, 64, 29, 4, 1f);
             for (int i = 0; i < 8; i++)
             {
                 float angle = i * Mathf.PI / 4f;
-                Vector2 inner = new Vector2(64f + Mathf.Cos(angle) * 12f, 64f + Mathf.Sin(angle) * 12f);
-                Vector2 outer = new Vector2(64f + Mathf.Cos(angle + 0.18f) * 48f, 64f + Mathf.Sin(angle + 0.18f) * 48f);
-                Line(texture, inner, outer, 3, 1f);
+                Vector2 inner = Point(64, 64, 24f, angle);
+                Vector2 outer = Point(64, 64, 47f, angle + 0.16f);
+                Sword(texture, inner, outer, 4, 1f);
             }
             FilledCircle(texture, 64, 64, 7, 1f);
+        }
+
+        private static void FallingFlowerRain(Texture2D texture)
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                float angle = i * Mathf.PI / 3f;
+                Vector2 center = Point(64, 42, 18f, angle);
+                FilledCircle(texture, Mathf.RoundToInt(center.x), Mathf.RoundToInt(center.y), 9, 0.92f);
+            }
+            FilledCircle(texture, 64, 42, 8, 1f);
+            for (int i = 0; i < 7; i++)
+            {
+                float x = 27f + i * 12f;
+                Sword(texture, new Vector2(x, 60f + (i % 2) * 7f), new Vector2(x - 8f, 108f), 3, 1f);
+            }
+        }
+
+        private static void LeylinePods(Texture2D texture)
+        {
+            FilledCircle(texture, 64, 64, 7, 1f);
+            for (int i = 0; i < 6; i++)
+            {
+                float angle = i * Mathf.PI / 3f;
+                Vector2 pod = Point(64, 64, 39f, angle);
+                Line(texture, new Vector2(64f, 64f), pod, 2, 0.82f);
+                FilledCircle(texture, Mathf.RoundToInt(pod.x - 5f), Mathf.RoundToInt(pod.y), 8, 1f);
+                FilledCircle(texture, Mathf.RoundToInt(pod.x + 5f), Mathf.RoundToInt(pod.y), 8, 1f);
+                Sword(texture, pod + Vector2.down * 10f, pod + Vector2.up * 17f, 3, 0.90f);
+            }
+        }
+
+        private static void RoyalPodArmory(Texture2D texture)
+        {
+            FilledCircle(texture, 53, 34, 20, 0.78f);
+            FilledCircle(texture, 75, 34, 20, 0.78f);
+            Line(texture, new Vector2(39f, 37f), new Vector2(26f, 21f), 4, 1f);
+            Line(texture, new Vector2(53f, 28f), new Vector2(53f, 14f), 4, 1f);
+            Line(texture, new Vector2(75f, 28f), new Vector2(75f, 14f), 4, 1f);
+            Line(texture, new Vector2(89f, 37f), new Vector2(102f, 21f), 4, 1f);
+            for (int i = 0; i < 9; i++)
+            {
+                float x = 24f + i * 10f;
+                float tilt = (i - 4) * 2.4f;
+                Sword(texture, new Vector2(x, 58f), new Vector2(x + tilt, 108f), 3, 1f);
+            }
+            Sword(texture, new Vector2(64f, 48f), new Vector2(64f, 116f), 6, 1f);
+        }
+
+        private static void CarapaceRelease(Texture2D texture)
+        {
+            FilledCircle(texture, 64, 68, 9, 1f);
+            for (int i = 0; i < 6; i++)
+            {
+                float angle = i * Mathf.PI / 3f + Mathf.PI / 6f;
+                Vector2 inner = Point(64, 68, 16f, angle);
+                Vector2 outer = Point(64, 68, 48f, angle);
+                Sword(texture, inner, outer, 5, 1f);
+            }
+            Ring(texture, 64, 68, 24, 2, 0.72f);
+        }
+
+        private static void PeanutChainSword(Texture2D texture)
+        {
+            Ring(texture, 64, 64, 25, 3, 0.78f);
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = i * Mathf.PI / 4f;
+                Vector2 outer = Point(64, 64, 49f, angle);
+                Vector2 inner = Point(64, 64, 12f, angle + 0.12f);
+                Sword(texture, outer, inner, 4, 1f);
+            }
+            Line(texture, new Vector2(35f, 93f), new Vector2(94f, 34f), 5, 1f);
+        }
+
+        private static void FallenFlowerRoot(Texture2D texture)
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                float angle = i * Mathf.PI / 3f;
+                Vector2 petal = Point(64, 35, 17f, angle);
+                FilledCircle(texture, Mathf.RoundToInt(petal.x), Mathf.RoundToInt(petal.y), 8, 0.92f);
+            }
+            FilledCircle(texture, 64, 35, 7, 1f);
+            Line(texture, new Vector2(64f, 48f), new Vector2(64f, 82f), 4, 0.78f);
+            for (int i = 0; i < 7; i++)
+            {
+                float x = 28f + i * 12f;
+                Sword(texture, new Vector2(64f, 82f), new Vector2(x, 110f), 3, 1f);
+            }
+            Ring(texture, 64, 84, 28, 2, 0.64f);
+        }
+
+        private static void GoldenCoreHeavenSever(Texture2D texture)
+        {
+            FilledCircle(texture, 64, 46, 23, 0.90f);
+            Ring(texture, 64, 46, 28, 3, 1f);
+            for (int i = 0; i < 10; i++)
+            {
+                float angle = i * Mathf.PI / 5f;
+                Line(texture, Point(64, 46, 30f, angle), Point(64, 46, 45f, angle), 2, 0.82f);
+            }
+            Sword(texture, new Vector2(64f, 18f), new Vector2(64f, 112f), 7, 1f);
+            Line(texture, new Vector2(46f, 87f), new Vector2(82f, 87f), 5, 1f);
+        }
+
+        private static void Sword(Texture2D texture, Vector2 from, Vector2 to, int thickness, float alpha)
+        {
+            Line(texture, from, to, thickness, alpha);
+            Vector2 direction = (to - from).normalized;
+            Vector2 side = new Vector2(-direction.y, direction.x);
+            Line(texture, to, to - direction * 10f + side * 6f, Mathf.Max(2, thickness - 1), alpha);
+            Line(texture, to, to - direction * 10f - side * 6f, Mathf.Max(2, thickness - 1), alpha);
+        }
+
+        private static Vector2 Point(float centerX, float centerY, float radius, float angle)
+        {
+            return new Vector2(centerX + Mathf.Cos(angle) * radius, centerY + Mathf.Sin(angle) * radius);
         }
 
         private static void Ring(Texture2D texture, int centerX, int centerY, int radius, int thickness, float alpha)
@@ -148,13 +184,11 @@ namespace PeanutWarrior.Prototype
             int min = radius - thickness;
             int max = radius + thickness;
             for (int y = centerY - max; y <= centerY + max; y++)
-            {
                 for (int x = centerX - max; x <= centerX + max; x++)
                 {
                     float distance = Vector2.Distance(new Vector2(x, y), new Vector2(centerX, centerY));
                     if (distance >= min && distance <= max) Pixel(texture, x, y, alpha);
                 }
-            }
         }
 
         private static void FilledCircle(Texture2D texture, int centerX, int centerY, int radius, float alpha)

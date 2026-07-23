@@ -31,8 +31,9 @@ namespace PeanutWarrior.Prototype
         public string ShopMessage => shopMessage;
         public int DailyStreak => dailyStreak;
         public int TotalSwordSummons => totalSwordSummons;
-        public int HuntingSwordSummons => huntingSwordSummons;
-        public int BossSwordSummons => bossSwordSummons;
+        public int HuntingSwordSummons => totalSwordSummons;
+        public int BossSwordSummons => totalSwordSummons;
+        public bool UsesUnifiedSwordSummon => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateShop()
@@ -86,11 +87,18 @@ namespace PeanutWarrior.Prototype
             return before != shopMessage && !shopMessage.Contains("이미 수령");
         }
 
-        public bool TrySummonSword(bool boss)
+        public bool TrySummonSword()
         {
             int before = Diamonds;
-            SummonSword(boss);
+            SummonSword();
             return Diamonds < before;
+        }
+
+        // Compatibility overload. The old battle-type argument is intentionally ignored
+        // because every equipment item now owns both hunting and boss effects.
+        public bool TrySummonSword(bool boss)
+        {
+            return TrySummonSword();
         }
 
         public bool TryBuyEgg()
@@ -131,11 +139,11 @@ namespace PeanutWarrior.Prototype
             Save();
         }
 
-        private void SummonSword(bool equipForBoss)
+        private void SummonSword()
         {
             if (!SpendDiamonds(5))
             {
-                shopMessage = $"{(equipForBoss ? "보스용" : "사냥용")} 검 소환에 다이아 5개 필요";
+                shopMessage = "검 장비 소환에 다이아 5개 필요";
                 return;
             }
 
@@ -144,22 +152,21 @@ namespace PeanutWarrior.Prototype
             int rarity = rarityRoll < 20 ? 4 : rarityRoll < 120 ? 3 : rarityRoll < 420 ? 2 : 1;
             swordCopies[elementIndex]++;
             totalSwordSummons++;
-            if (equipForBoss) bossSwordSummons++;
-            else huntingSwordSummons++;
+            huntingSwordSummons = totalSwordSummons;
+            bossSwordSummons = totalSwordSummons;
 
             swordProgression?.RegisterSummon(elementIndex, rarity);
-            equipmentCatalog?.RegisterSummon(equipForBoss, elementIndex, rarity);
+            equipmentCatalog?.RegisterSummon(elementIndex, rarity);
 
-            string use = equipForBoss ? "보스용" : "사냥용";
             if (totalSwordSummons % 5 == 0 && basicAttackLevelField != null)
             {
                 int level = Convert.ToInt32(basicAttackLevelField.GetValue(arena));
                 basicAttackLevelField.SetValue(arena, level + 1);
-                shopMessage = $"{use} {ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 장비 도감으로 기본 공격 강화";
+                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 사냥/보스 효과 해금 · 기본 공격 강화";
             }
             else
             {
-                shopMessage = $"{use} {ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 장비 화면에서 장착";
+                shopMessage = $"{ElementName(elementIndex)} 검 {RarityName(rarity)} 획득 · 사냥/보스 효과 동시 해금";
             }
             Save();
         }
@@ -186,8 +193,8 @@ namespace PeanutWarrior.Prototype
         {
             PlayerPrefs.SetInt(Prefix + "Streak", dailyStreak);
             PlayerPrefs.SetInt(Prefix + "SwordSummons", totalSwordSummons);
-            PlayerPrefs.SetInt(Prefix + "HuntingSwordSummons", huntingSwordSummons);
-            PlayerPrefs.SetInt(Prefix + "BossSwordSummons", bossSwordSummons);
+            PlayerPrefs.SetInt(Prefix + "HuntingSwordSummons", totalSwordSummons);
+            PlayerPrefs.SetInt(Prefix + "BossSwordSummons", totalSwordSummons);
             PlayerPrefs.SetString(Prefix + "LastClaim", lastClaimDate);
             for (int i = 0; i < swordCopies.Length; i++)
                 PlayerPrefs.SetInt(Prefix + "SwordCopies" + i, swordCopies[i]);
@@ -197,12 +204,16 @@ namespace PeanutWarrior.Prototype
         private void Load()
         {
             dailyStreak = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "Streak", 0));
-            totalSwordSummons = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "SwordSummons", 0));
-            huntingSwordSummons = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "HuntingSwordSummons", totalSwordSummons));
-            bossSwordSummons = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "BossSwordSummons", 0));
+            int legacyTotal = PlayerPrefs.GetInt(Prefix + "SwordSummons", 0);
+            int legacyHunting = PlayerPrefs.GetInt(Prefix + "HuntingSwordSummons", legacyTotal);
+            int legacyBoss = PlayerPrefs.GetInt(Prefix + "BossSwordSummons", 0);
+            totalSwordSummons = Mathf.Max(0, Mathf.Max(legacyTotal, legacyHunting + legacyBoss));
+            huntingSwordSummons = totalSwordSummons;
+            bossSwordSummons = totalSwordSummons;
             lastClaimDate = PlayerPrefs.GetString(Prefix + "LastClaim", string.Empty);
             for (int i = 0; i < swordCopies.Length; i++)
                 swordCopies[i] = Mathf.Max(0, PlayerPrefs.GetInt(Prefix + "SwordCopies" + i, 0));
+            Save();
         }
 
         private void OnApplicationPause(bool paused)

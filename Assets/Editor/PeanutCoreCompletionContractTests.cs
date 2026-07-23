@@ -101,6 +101,11 @@ namespace PeanutWarrior.Tests
             Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillCombatSummary", PublicInstance));
             Assert.NotNull(typeof(SkillManagementPrototype).GetMethod("GetSkillRole", PublicInstance));
 
+            Assert.NotNull(typeof(GlobalSkillAutoGatePrototype).GetProperty("UsesConfirmedMpCosts", PublicInstance));
+            Assert.NotNull(typeof(GlobalSkillAutoGatePrototype).GetProperty("UsesTacticalAutoPriority", PublicInstance));
+            Assert.NotNull(typeof(GlobalSkillAutoGatePrototype).GetProperty("HuntingAutoPriority", PublicInstance));
+            Assert.NotNull(typeof(GlobalSkillAutoGatePrototype).GetProperty("BossAutoPriority", PublicInstance));
+
             Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetProperty("UsesEightDistinctSkillExecutions", PublicInstance));
             Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetProperty("CorrectsLegacySkillCostsAndCooldowns", PublicInstance));
             Assert.NotNull(typeof(SpectacularPeanutSkillCombatPrototype).GetProperty("UsesHuntingAreaAndBossFocusRoles", PublicInstance));
@@ -115,6 +120,13 @@ namespace PeanutWarrior.Tests
             Assert.NotNull(typeof(SpectacularPeanutSkillWorldViewPrototype).GetMethod("SpawnFlower", PrivateInstance));
             Assert.NotNull(typeof(SpectacularPeanutSkillWorldViewPrototype).GetMethod("SpawnPodPortal", PrivateInstance));
             Assert.NotNull(typeof(SpectacularPeanutSkillWorldViewPrototype).GetMethod("SpawnCore", PrivateInstance));
+
+            Assert.NotNull(typeof(PeanutBasicAttackWorldViewPrototype).GetProperty("PreservesBasicAttackEffects", PublicInstance));
+            Assert.NotNull(typeof(SpectacularSkillIconSyncPrototype).GetProperty("SynchronizesMenuAndBattleIcons", PublicInstance));
+            Assert.NotNull(typeof(SpectacularSkillIconSyncPrototype).GetProperty("SynchronizesSkillColors", PublicInstance));
+            Assert.NotNull(typeof(SpectacularSkillIconSyncPrototype).GetProperty("WaitsForBuilderAssetInitialization", PublicInstance));
+            Assert.NotNull(typeof(SpectacularSkillIconSyncPrototype).GetProperty("SynchronizedIconCount", PublicInstance));
+            Assert.NotNull(typeof(SpectacularSkillIconSyncPrototype).GetMethod("Apply", PrivateInstance));
         }
 
         [Test]

@@ -8,9 +8,8 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Prototype-only meta systems layered on top of CombatPrototypeArena.
-    /// Includes mini peanuts, formations, egg incubation, missions, achievements,
-    /// PlayerPrefs save/load, and capped offline rewards.
+    /// Core idle systems for three immortal pets. Each pet receives a separate target
+    /// whenever possible and keeps a minimum distance from the other pets.
     /// </summary>
     public sealed class IdleSystemsPrototype : MonoBehaviour
     {
@@ -23,6 +22,7 @@ namespace PeanutWarrior.Prototype
             public float MoveTimer;
             public float AttackTimer;
             public MiniElement Element;
+            public int AssignedEnemyIndex = -1;
         }
 
         private const string SavePrefix = "PeanutWarrior.Prototype.";
@@ -32,12 +32,37 @@ namespace PeanutWarrior.Prototype
         private const float MapRight = ArenaWidth - 55f;
         private const float MapTop = 155f;
         private const float MapBottom = ArenaHeight - 45f;
+        private const float MinimumPetSpacing = 92f;
+        private const float PetMoveSpeed = 88f;
+        private const float PetAttackRange = 104f;
+
+        private static readonly Vector2[] HuntingApproachOffsets =
+        {
+            new Vector2(-74f, 38f),
+            new Vector2(0f, -76f),
+            new Vector2(74f, 38f)
+        };
+
+        private static readonly Vector2[] BossApproachOffsets =
+        {
+            new Vector2(-96f, 42f),
+            new Vector2(0f, -92f),
+            new Vector2(96f, 42f)
+        };
+
+        private static readonly Vector2[] IdleFormationOffsets =
+        {
+            new Vector2(-126f, 44f),
+            new Vector2(0f, -112f),
+            new Vector2(126f, 44f)
+        };
 
         private readonly List<MiniUnit> minis = new List<MiniUnit>();
         private readonly MiniElement[] huntingFormation =
             { MiniElement.Fire, MiniElement.Ice, MiniElement.Lightning };
         private readonly MiniElement[] bossFormation =
             { MiniElement.Lightning, MiniElement.Fire, MiniElement.Ice };
+        private readonly HashSet<object> claimedTargets = new HashSet<object>();
 
         private CombatPrototypeArena arena;
         private StageFlowController stageFlow;
@@ -63,7 +88,7 @@ namespace PeanutWarrior.Prototype
         private int claimedStageMissionTier;
         private int claimedAchievementTier;
         private float saveTimer;
-        private string systemMessage = "미니 시스템 준비";
+        private string systemMessage = "펫 시스템 준비";
 
         private long MiniAttackCost => 80L * miniAttackLevel;
         private long MiniCritCost => 100L * miniCritLevel;
@@ -85,7 +110,7 @@ namespace PeanutWarrior.Prototype
         {
             arena = FindFirstObjectByType<CombatPrototypeArena>();
             stageFlow = FindFirstObjectByType<StageFlowController>();
-            if (arena == null)
+            if (arena == null || stageFlow == null)
             {
                 enabled = false;
                 return;
@@ -121,7 +146,7 @@ namespace PeanutWarrior.Prototype
                     eggs = Mathf.Max(0, eggs - 1);
                     hatchedMinis++;
                     AddDiamonds(1);
-                    systemMessage = $"알 부화 완료 · 미니 도감 {hatchedMinis} · 다이아 +1";
+                    systemMessage = $"알 부화 완료 · 펫 도감 {hatchedMinis} · 다이아 +1";
                 }
             }
 
@@ -145,15 +170,18 @@ namespace PeanutWarrior.Prototype
         private void CreateMinis()
         {
             minis.Clear();
+            Vector2 center = new Vector2(380f, 280f);
             for (int i = 0; i < 3; i++)
             {
+                Vector2 start = ClampToMap(center + IdleFormationOffsets[i]);
                 minis.Add(new MiniUnit
                 {
-                    Position = new Vector2(300f + i * 35f, 260f),
-                    TargetPosition = RandomMapPoint(),
-                    MoveTimer = UnityEngine.Random.Range(0.5f, 2f),
+                    Position = start,
+                    TargetPosition = start,
+                    MoveTimer = UnityEngine.Random.Range(0.5f, 1.4f),
                     AttackTimer = UnityEngine.Random.Range(0.1f, 0.8f),
-                    Element = huntingFormation[i]
+                    Element = huntingFormation[i],
+                    AssignedEnemyIndex = -1
                 });
             }
         }
@@ -165,23 +193,32 @@ namespace PeanutWarrior.Prototype
                 ? (Vector2)playerPositionField.GetValue(arena)
                 : new Vector2(380f, 280f);
 
+            claimedTargets.Clear();
+            bool bossBattle = stageFlow.Phase == StageFlowPhase.BossBattle;
+
             for (int i = 0; i < minis.Count; i++)
             {
                 MiniUnit mini = minis[i];
-                mini.Element = stageFlow.Phase == StageFlowPhase.BossBattle
-                    ? bossFormation[i]
-                    : huntingFormation[i];
+                mini.Element = bossBattle ? bossFormation[i] : huntingFormation[i];
 
-                object target = FindClosestEnemy(enemies, mini.Position, out Vector2 enemyPosition);
-                if (target != null && Vector2.Distance(mini.Position, enemyPosition) <= 210f)
+                object target = bossBattle
+                    ? FindBoss(enemies, out Vector2 targetPosition, out int targetIndex)
+                    : FindClosestUnclaimedEnemy(enemies, mini.Position, out targetPosition, out targetIndex);
+
+                if (target != null)
                 {
-                    if (Vector2.Distance(mini.Position, enemyPosition) > 78f)
-                    {
-                        mini.Position = Vector2.MoveTowards(mini.Position, enemyPosition, 78f * Time.deltaTime);
-                    }
+                    if (!bossBattle) claimedTargets.Add(target);
+                    mini.AssignedEnemyIndex = targetIndex;
+                    Vector2 offset = bossBattle
+                        ? BossApproachOffsets[i % BossApproachOffsets.Length]
+                        : HuntingApproachOffsets[i % HuntingApproachOffsets.Length];
+                    Vector2 desired = ClampToMap(targetPosition + offset);
+                    mini.TargetPosition = desired;
+                    mini.Position = Vector2.MoveTowards(mini.Position, desired, PetMoveSpeed * Time.deltaTime);
 
                     mini.AttackTimer -= Time.deltaTime;
-                    if (mini.AttackTimer <= 0f && Vector2.Distance(mini.Position, enemyPosition) <= 95f)
+                    float distanceToEnemy = Vector2.Distance(mini.Position, targetPosition);
+                    if (mini.AttackTimer <= 0f && distanceToEnemy <= PetAttackRange)
                     {
                         mini.AttackTimer = 0.9f - Mathf.Min(0.3f, miniAttackLevel * 0.01f);
                         float damage = MiniDamage;
@@ -189,31 +226,54 @@ namespace PeanutWarrior.Prototype
                         if (critical) damage *= MiniCritMultiplier;
                         damage *= ElementMultiplier(mini.Element, target);
                         dealDamageMethod?.Invoke(arena, new[] { target, (object)damage, false });
-                        systemMessage = $"미니 {ElementName(mini.Element)} 공격{(critical ? " · 치명타" : string.Empty)}";
+                        systemMessage = $"{ElementName(mini.Element)} 펫 개별 공격{(critical ? " · 치명타" : string.Empty)}";
                     }
                 }
                 else
                 {
+                    mini.AssignedEnemyIndex = -1;
                     mini.MoveTimer -= Time.deltaTime;
+                    Vector2 desired = ClampToMap(playerPosition + IdleFormationOffsets[i % IdleFormationOffsets.Length]);
                     if (mini.MoveTimer <= 0f || Vector2.Distance(mini.Position, mini.TargetPosition) < 8f)
                     {
-                        Vector2 orbit = playerPosition + UnityEngine.Random.insideUnitCircle * 115f;
-                        mini.TargetPosition = ClampToMap(orbit);
-                        mini.MoveTimer = UnityEngine.Random.Range(1f, 2.8f);
+                        mini.TargetPosition = desired + UnityEngine.Random.insideUnitCircle * 18f;
+                        mini.TargetPosition = ClampToMap(mini.TargetPosition);
+                        mini.MoveTimer = UnityEngine.Random.Range(1f, 2.2f);
                     }
-                    mini.Position = Vector2.MoveTowards(mini.Position, mini.TargetPosition, 62f * Time.deltaTime);
+                    mini.Position = Vector2.MoveTowards(mini.Position, mini.TargetPosition, 68f * Time.deltaTime);
                 }
+
                 mini.Position = ClampToMap(mini.Position);
             }
+
+            SeparatePets();
         }
 
-        private object FindClosestEnemy(IList enemies, Vector2 origin, out Vector2 position)
+        private object FindClosestUnclaimedEnemy(IList enemies, Vector2 origin, out Vector2 position, out int index)
         {
             position = Vector2.zero;
+            index = -1;
             if (enemies == null || enemies.Count == 0) return null;
 
             object closest = null;
             float best = float.MaxValue;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                object enemy = enemies[i];
+                if (enemy == null || claimedTargets.Contains(enemy)) continue;
+                FieldInfo positionInfo = enemy.GetType().GetField("Position", BindingFlags.Instance | BindingFlags.Public);
+                if (positionInfo == null) continue;
+                Vector2 enemyPosition = (Vector2)positionInfo.GetValue(enemy);
+                float distance = Vector2.SqrMagnitude(enemyPosition - origin);
+                if (distance >= best) continue;
+                best = distance;
+                closest = enemy;
+                position = enemyPosition;
+                index = i;
+            }
+
+            if (closest != null) return closest;
+
             for (int i = 0; i < enemies.Count; i++)
             {
                 object enemy = enemies[i];
@@ -226,13 +286,58 @@ namespace PeanutWarrior.Prototype
                 best = distance;
                 closest = enemy;
                 position = enemyPosition;
+                index = i;
             }
             return closest;
         }
 
+        private static object FindBoss(IList enemies, out Vector2 position, out int index)
+        {
+            position = Vector2.zero;
+            index = -1;
+            if (enemies == null || enemies.Count == 0) return null;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                object enemy = enemies[i];
+                if (enemy == null) continue;
+                Type type = enemy.GetType();
+                FieldInfo positionInfo = type.GetField("Position", BindingFlags.Instance | BindingFlags.Public);
+                if (positionInfo == null) continue;
+                FieldInfo bossInfo = type.GetField("IsBoss", BindingFlags.Instance | BindingFlags.Public);
+                if (bossInfo == null || Convert.ToBoolean(bossInfo.GetValue(enemy)))
+                {
+                    position = (Vector2)positionInfo.GetValue(enemy);
+                    index = i;
+                    return enemy;
+                }
+            }
+            return null;
+        }
+
+        private void SeparatePets()
+        {
+            for (int pass = 0; pass < 3; pass++)
+            {
+                for (int i = 0; i < minis.Count; i++)
+                {
+                    for (int j = i + 1; j < minis.Count; j++)
+                    {
+                        Vector2 delta = minis[j].Position - minis[i].Position;
+                        float distance = delta.magnitude;
+                        if (distance >= MinimumPetSpacing) continue;
+                        Vector2 direction = distance > 0.01f
+                            ? delta / distance
+                            : Quaternion.Euler(0f, 0f, 120f * (j + 1)) * Vector2.right;
+                        float correction = (MinimumPetSpacing - distance) * 0.5f;
+                        minis[i].Position = ClampToMap(minis[i].Position - direction * correction);
+                        minis[j].Position = ClampToMap(minis[j].Position + direction * correction);
+                    }
+                }
+            }
+        }
+
         private static float ElementMultiplier(MiniElement element, object target)
         {
-            // No enemy weakness system: each element keeps a neutral damage budget.
             return element switch
             {
                 MiniElement.Fire => 1.04f,
@@ -291,7 +396,7 @@ namespace PeanutWarrior.Prototype
             }
             diamondsField.SetValue(arena, Diamonds - 3);
             eggs++;
-            systemMessage = "미니 알 구매 완료";
+            systemMessage = "펫 알 구매 완료";
         }
 
         private void StartIncubation()
@@ -303,7 +408,7 @@ namespace PeanutWarrior.Prototype
             }
             incubating = true;
             incubationRemaining = 60f;
-            systemMessage = "알 부화 시작 · 프로토타입 60초";
+            systemMessage = "알 부화 시작 · 60초";
         }
 
         private void ClaimKillMission()
@@ -353,8 +458,7 @@ namespace PeanutWarrior.Prototype
         private void GrantOfflineRewards()
         {
             string key = SavePrefix + "LastUtcTicks";
-            long previousTicks;
-            if (!long.TryParse(PlayerPrefs.GetString(key, "0"), out previousTicks) || previousTicks <= 0)
+            if (!long.TryParse(PlayerPrefs.GetString(key, "0"), out long previousTicks) || previousTicks <= 0)
             {
                 PlayerPrefs.SetString(key, DateTime.UtcNow.Ticks.ToString());
                 return;
@@ -414,53 +518,7 @@ namespace PeanutWarrior.Prototype
 
         private void OnGUI()
         {
-            if (arena == null || stageFlow == null) return;
-            float left = Mathf.Max(20f, (Screen.width - ArenaWidth) * 0.5f);
-            float top = Mathf.Max(20f, Screen.height - ArenaHeight - 35f);
-
-            if (IsMiniUnlocked())
-            {
-                for (int i = 0; i < minis.Count; i++)
-                {
-                    MiniUnit mini = minis[i];
-                    Rect rect = new Rect(left + mini.Position.x - 18f, top + mini.Position.y - 18f, 36f, 36f);
-                    GUI.Box(rect, $"미니\n{ElementName(mini.Element)}");
-                }
-            }
-
-            Rect panel = new Rect(left - 250f, top, 240f, 470f);
-            GUI.Box(panel, "미니·방치 시스템");
-            GUI.Label(new Rect(panel.x + 10f, panel.y + 28f, 220f, 38f), systemMessage);
-            GUI.Label(new Rect(panel.x + 10f, panel.y + 68f, 220f, 42f),
-                IsMiniUnlocked() ? $"미니 3/3 활동 · 외형 전직 {Mathf.Max(0, AdvancementTier - 1)}단계" : "2차 전직 후 미니 3슬롯 해금");
-
-            if (GUI.Button(new Rect(panel.x + 10f, panel.y + 112f, 105f, 42f), $"미니 공격 Lv.{miniAttackLevel}\n{MiniAttackCost}G") && SpendGold(MiniAttackCost)) miniAttackLevel++;
-            if (GUI.Button(new Rect(panel.x + 122f, panel.y + 112f, 105f, 42f), $"치명타 Lv.{miniCritLevel}\n{MiniCritCost}G") && SpendGold(MiniCritCost)) miniCritLevel++;
-            if (GUI.Button(new Rect(panel.x + 10f, panel.y + 160f, 217f, 42f), $"치명타 피해 Lv.{miniCritDamageLevel} · {MiniCritDamageCost}G") && SpendGold(MiniCritDamageCost)) miniCritDamageLevel++;
-
-            GUI.Label(new Rect(panel.x + 10f, panel.y + 208f, 220f, 22f), "사냥 편성 (클릭해 속성 변경)");
-            for (int i = 0; i < 3; i++)
-            {
-                if (GUI.Button(new Rect(panel.x + 10f + i * 73f, panel.y + 232f, 68f, 34f), ElementName(huntingFormation[i]))) CycleFormation(i, false);
-            }
-            GUI.Label(new Rect(panel.x + 10f, panel.y + 270f, 220f, 22f), "보스 편성");
-            for (int i = 0; i < 3; i++)
-            {
-                if (GUI.Button(new Rect(panel.x + 10f + i * 73f, panel.y + 294f, 68f, 34f), ElementName(bossFormation[i]))) CycleFormation(i, true);
-            }
-
-            GUI.Label(new Rect(panel.x + 10f, panel.y + 334f, 220f, 22f), $"알 {eggs} · 부화 도감 {hatchedMinis}");
-            if (GUI.Button(new Rect(panel.x + 10f, panel.y + 358f, 105f, 34f), "알 구매 3◆")) BuyEgg();
-            if (GUI.Button(new Rect(panel.x + 122f, panel.y + 358f, 105f, 34f), incubating ? $"부화 {Mathf.CeilToInt(incubationRemaining)}초" : "부화 시작")) StartIncubation();
-
-            if (GUI.Button(new Rect(panel.x + 10f, panel.y + 398f, 68f, 48f), "처치\n미션")) ClaimKillMission();
-            if (GUI.Button(new Rect(panel.x + 84f, panel.y + 398f, 68f, 48f), "스테이지\n미션")) ClaimStageMission();
-            if (GUI.Button(new Rect(panel.x + 158f, panel.y + 398f, 68f, 48f), "성장\n업적")) ClaimGrowthAchievement();
-        }
-
-        private static Vector2 RandomMapPoint()
-        {
-            return new Vector2(UnityEngine.Random.Range(MapLeft, MapRight), UnityEngine.Random.Range(MapTop, MapBottom));
+            // Legacy debug GUI intentionally disabled. The mobile Canvas owns the UI.
         }
 
         private static Vector2 ClampToMap(Vector2 point)

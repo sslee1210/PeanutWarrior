@@ -47,17 +47,33 @@ namespace PeanutWarrior.Prototype
         private string activePage = string.Empty;
         private float refreshTimer;
 
+        private GameObject detailOverlay;
+        private Image detailIcon;
+        private Text detailType;
+        private Text detailName;
+        private Text detailDescription;
+        private Text detailStats;
+        private Text detailLevel;
+        private Text detailCost;
+        private Button detailUpgradeButton;
+        private Text detailUpgradeText;
+        private int selectedSkill = -1;
+
         private readonly Color background = new Color(0.94f, 0.96f, 0.89f, 1f);
         private readonly Color darkGreen = new Color(0.06f, 0.23f, 0.10f, 1f);
         private readonly Color brown = new Color(0.20f, 0.12f, 0.06f, 1f);
         private readonly Color muted = new Color(0.48f, 0.51f, 0.45f, 1f);
         private readonly Color green = new Color(0.16f, 0.42f, 0.22f, 1f);
         private readonly Color red = new Color(0.72f, 0.20f, 0.15f, 1f);
+        private readonly Color cream = new Color(0.98f, 0.95f, 0.82f, 1f);
+        private readonly Color gold = new Color(0.94f, 0.61f, 0.10f, 1f);
 
         public int SkillIconCount => 8;
         public bool UsesCardlessSkillLayout => true;
         public bool UsesNamedSkillSilhouettes => true;
         public bool AutoButtonIsTopLeft => true;
+        public bool UsesSkillDetailWindow => true;
+        public bool ShowsAccurateDamageDetails => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -144,6 +160,7 @@ namespace PeanutWarrior.Prototype
         {
             sourceRefreshers?.Clear();
             refreshers.Clear();
+            selectedSkill = -1;
             for (int i = contentHost.transform.childCount - 1; i >= 0; i--)
             {
                 GameObject child = contentHost.transform.GetChild(i).gameObject;
@@ -175,7 +192,9 @@ namespace PeanutWarrior.Prototype
             divider.raycastTarget = false;
 
             for (int i = 0; i < 8; i++) BuildSkill(i);
-            Label(root.transform, "스킬 문양을 눌러 조각으로 강화", 18f, 610f, 1352f, 26f, 13, muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            Label(root.transform, "스킬 문양을 누르면 상세 능력과 실제 피해량을 확인할 수 있습니다.",
+                18f, 610f, 1352f, 26f, 13, muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            BuildDetailWindow();
         }
 
         private void BuildSkill(int index)
@@ -212,25 +231,84 @@ namespace PeanutWarrior.Prototype
             colors.pressedColor = new Color(0.74f, 0.78f, 0.70f, 1f);
             colors.disabledColor = new Color(0.48f, 0.48f, 0.48f, 0.52f);
             button.colors = colors;
-            button.onClick.AddListener(() => UpgradeSkill(captured));
+            button.onClick.AddListener(() => OpenSkillDetails(captured));
 
             Text name = Label(root.transform, string.Empty, x - 42f, y + 172f, 260f, 32f, 18, darkGreen, TextAnchor.MiddleCenter, FontStyle.Bold);
             Text state = Label(root.transform, string.Empty, x - 42f, y + 204f, 260f, 28f, 14, brown, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Text cost = Label(root.transform, string.Empty, x - 42f, y + 232f, 260f, 26f, 13, muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            Text hint = Label(root.transform, "상세 보기", x - 42f, y + 232f, 260f, 26f, 13, muted, TextAnchor.MiddleCenter, FontStyle.Normal);
 
             refreshers.Add(() =>
             {
-                int[] levels = skills.SkillLevels;
                 float[] cooldowns = skills.Cooldowns;
-                int level = levels != null && captured < levels.Length ? levels[captured] : 1;
                 float cooldown = cooldowns != null && captured < cooldowns.Length ? Mathf.Max(0f, cooldowns[captured]) : 0f;
-                long upgradeCost = skills.GetUpgradeCost(captured);
                 name.text = skills.GetSkillName(captured);
-                state.text = $"Lv.{level}  ·  {(cooldown > 0.05f ? cooldown.ToString("0.0") + "초" : "READY")}";
-                cost.text = $"강화 {upgradeCost:N0} 조각";
-                button.interactable = skills.Fragments >= upgradeCost;
-                icon.color = button.interactable ? SkillColors[captured] : Color.Lerp(SkillColors[captured], Color.gray, 0.58f);
+                state.text = $"Lv.{skills.GetSkillLevel(captured)}  ·  {(cooldown > 0.05f ? cooldown.ToString("0.0") + "초" : "READY")}";
+                hint.color = selectedSkill == captured ? SkillColors[captured] : muted;
+                icon.color = SkillColors[captured];
             });
+        }
+
+        private void BuildDetailWindow()
+        {
+            detailOverlay = Rect(root.transform, "Skill Detail Overlay", 0f, 0f, Width, Height).gameObject;
+            Image dim = detailOverlay.AddComponent<Image>();
+            dim.sprite = backgroundSprite;
+            dim.color = new Color(0.03f, 0.04f, 0.05f, 0.70f);
+
+            GameObject panel = Panel(detailOverlay.transform, "Skill Detail Window", 304f, 72f, 780f, 506f, cream, gold);
+            SmallButton(panel.transform, "닫기", 674f, 16f, 82f, 36f, CloseSkillDetails);
+
+            GameObject iconObject = Rect(panel.transform, "Detail Skill Icon", 34f, 56f, 188f, 188f).gameObject;
+            detailIcon = iconObject.AddComponent<Image>();
+            detailIcon.preserveAspect = true;
+            detailType = Label(panel.transform, string.Empty, 250f, 54f, 470f, 30f, 15, muted, TextAnchor.MiddleLeft, FontStyle.Bold);
+            detailName = Label(panel.transform, string.Empty, 250f, 84f, 470f, 50f, 28, darkGreen, TextAnchor.MiddleLeft, FontStyle.Bold);
+            detailDescription = Label(panel.transform, string.Empty, 250f, 142f, 470f, 92f, 16, brown, TextAnchor.UpperLeft, FontStyle.Normal);
+
+            detailLevel = Label(panel.transform, string.Empty, 34f, 266f, 712f, 38f, 17, darkGreen, TextAnchor.MiddleLeft, FontStyle.Bold);
+            detailStats = Label(panel.transform, string.Empty, 34f, 312f, 712f, 84f, 18, brown, TextAnchor.UpperLeft, FontStyle.Bold);
+            detailCost = Label(panel.transform, string.Empty, 34f, 406f, 430f, 54f, 15, muted, TextAnchor.MiddleLeft, FontStyle.Bold);
+            detailUpgradeButton = SmallButton(panel.transform, string.Empty, 500f, 408f, 246f, 58f, UpgradeSelectedSkill);
+            detailUpgradeText = detailUpgradeButton.GetComponentInChildren<Text>();
+
+            detailOverlay.SetActive(false);
+            detailOverlay.transform.SetAsLastSibling();
+            refreshers.Add(RefreshDetailWindow);
+        }
+
+        private void OpenSkillDetails(int index)
+        {
+            selectedSkill = Mathf.Clamp(index, 0, 7);
+            if (detailOverlay != null)
+            {
+                detailOverlay.SetActive(true);
+                detailOverlay.transform.SetAsLastSibling();
+            }
+            RefreshDetailWindow();
+        }
+
+        private void CloseSkillDetails()
+        {
+            selectedSkill = -1;
+            if (detailOverlay != null) detailOverlay.SetActive(false);
+        }
+
+        private void RefreshDetailWindow()
+        {
+            if (detailOverlay == null || !detailOverlay.activeSelf || selectedSkill < 0 || skills == null) return;
+            int index = selectedSkill;
+            long cost = skills.GetUpgradeCost(index);
+            detailIcon.sprite = skillSprites[index];
+            detailIcon.color = SkillColors[index];
+            detailType.text = skills.IsBossSkill(index) ? "보스 스킬" : "사냥 스킬";
+            detailName.text = skills.GetSkillName(index);
+            detailDescription.text = skills.GetSkillDescription(index);
+            detailLevel.text = $"현재 Lv.{skills.GetSkillLevel(index)} · 피해 배율 ×{skills.GetSkillDamageMultiplier(index):0.00}";
+            detailStats.text = skills.GetSkillCombatSummary(index);
+            detailCost.text = $"보유 조각 {skills.Fragments:N0}\n다음 강화 비용 {cost:N0} 조각";
+            detailUpgradeButton.interactable = skills.Fragments >= cost;
+            detailUpgradeButton.GetComponent<Image>().color = detailUpgradeButton.interactable ? SkillColors[index] : muted;
+            detailUpgradeText.text = detailUpgradeButton.interactable ? "스킬 강화" : "조각 부족";
         }
 
         private void ToggleAuto()
@@ -240,11 +318,13 @@ namespace PeanutWarrior.Prototype
             Toast(skills.LastMessage);
         }
 
-        private void UpgradeSkill(int index)
+        private void UpgradeSelectedSkill()
         {
-            skills.UpgradeSkill(index);
+            if (selectedSkill < 0 || skills == null) return;
+            skills.UpgradeSkill(selectedSkill);
             saveService?.SaveNow();
             Toast(skills.LastMessage);
+            RefreshDetailWindow();
         }
 
         private void Toast(string message)
@@ -255,9 +335,23 @@ namespace PeanutWarrior.Prototype
                 Debug.Log("[PeanutWarrior] " + message);
         }
 
+        private GameObject Panel(Transform parent, string name, float x, float y, float width, float height, Color color, Color border)
+        {
+            RectTransform rect = Rect(parent, name, x, y, width, height);
+            Image image = rect.gameObject.AddComponent<Image>();
+            image.sprite = autoSprite;
+            image.type = Image.Type.Sliced;
+            image.color = color;
+            Outline outline = rect.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(border.r, border.g, border.b, 0.50f);
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+            outline.useGraphicAlpha = false;
+            return rect.gameObject;
+        }
+
         private Button SmallButton(Transform parent, string text, float x, float y, float width, float height, Action action)
         {
-            RectTransform rect = Rect(parent, "Skill Auto", x, y, width, height);
+            RectTransform rect = Rect(parent, "Skill Button", x, y, width, height);
             Image image = rect.gameObject.AddComponent<Image>();
             image.sprite = autoSprite;
             image.type = Image.Type.Sliced;
@@ -265,6 +359,12 @@ namespace PeanutWarrior.Prototype
             Button button = rect.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
             button.navigation = new Navigation { mode = Navigation.Mode.None };
+            ColorBlock colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1f, 1f, 1f, 0.94f);
+            colors.pressedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
+            colors.disabledColor = new Color(1f, 1f, 1f, 0.42f);
+            button.colors = colors;
             if (action != null) button.onClick.AddListener(() => action());
             Label(rect, text, 3f, 2f, width - 6f, height - 4f, 12, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
             return button;

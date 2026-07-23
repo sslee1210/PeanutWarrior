@@ -50,7 +50,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · direct pet combat uses separate targets and spacing, legacy skill blocks are hidden, cardless skill icons are active, and each menu page has one renderer.");
+                    "PASS · pets spread across targets, menus use one renderer, equipment entries show hunting/boss effects together, and skill details expose accurate combat values.");
                 yield break;
             }
 
@@ -108,7 +108,17 @@ namespace PeanutWarrior.Prototype
                 if (!menu.UsesCardlessSkillLayout) errors.Add("Skill menu must not use rectangular cards.");
                 if (!menu.UsesNamedSkillSilhouettes) errors.Add("Each skill needs a name-specific icon.");
                 if (!menu.AutoButtonIsTopLeft) errors.Add("Skill AUTO must be at the top-left.");
+                if (!menu.UsesSkillDetailWindow) errors.Add("Skill icons must open a detail window.");
+                if (!menu.ShowsAccurateDamageDetails) errors.Add("Skill detail window must show real combat values.");
             }
+
+            Type skillType = typeof(SkillManagementPrototype);
+            if (skillType.GetMethod("GetSkillDescription", BindingFlags.Instance | BindingFlags.Public) == null)
+                errors.Add("Skill description API is missing.");
+            if (skillType.GetMethod("GetSkillTotalDamage", BindingFlags.Instance | BindingFlags.Public) == null)
+                errors.Add("Skill damage detail API is missing.");
+            if (skillType.GetMethod("GetSkillCombatSummary", BindingFlags.Instance | BindingFlags.Public) == null)
+                errors.Add("Skill combat summary API is missing.");
 
             BattleSkillDockV6 dock = FindFirstObjectByType<BattleSkillDockV6>();
             if (dock != null)
@@ -145,15 +155,25 @@ namespace PeanutWarrior.Prototype
             ElementEquipmentCatalogPrototype catalog = FindFirstObjectByType<ElementEquipmentCatalogPrototype>();
             if (catalog != null)
             {
-                if (catalog.TotalItemCount != 96) errors.Add("Equipment catalog must contain 96 swords.");
-                if (catalog.ItemCountPerUse != 48) errors.Add("Each hunting/boss catalog must contain 48 swords.");
-                if (!catalog.UsesSeparateHuntingAndBossCatalogs)
-                    errors.Add("Hunting and boss equipment catalogs must remain separate.");
+                if (catalog.TotalItemCount != 48) errors.Add("Unified equipment catalog must contain 48 swords.");
+                if (!catalog.UsesUnifiedEquipmentEntries) errors.Add("Equipment entries must be unified.");
+                if (!catalog.ShowsDualBattleEffects) errors.Add("Each equipment entry must expose hunting and boss effects.");
+                if (catalog.UsesSeparateHuntingAndBossCatalogs)
+                    errors.Add("Hunting and boss catalogs must not remain separate.");
             }
 
             PeanutEquipmentAndShopMenuV5 menu = FindFirstObjectByType<PeanutEquipmentAndShopMenuV5>();
-            if (menu != null && !menu.UsesSeparateHuntingAndBossTabs)
-                errors.Add("Equipment page needs separate hunting and boss tabs.");
+            if (menu != null)
+            {
+                if (menu.UsesSeparateHuntingAndBossTabs)
+                    errors.Add("Equipment page must not use hunting/boss tabs.");
+                if (!menu.UsesUnifiedDualEffectCards)
+                    errors.Add("Equipment cards must show both battle effects.");
+            }
+
+            PrototypeShopAndDaily shop = FindFirstObjectByType<PrototypeShopAndDaily>();
+            if (shop != null && !shop.UsesUnifiedSwordSummon)
+                errors.Add("Sword summon must unlock one dual-effect equipment entry.");
         }
 
         private static void RequireSingle<T>(List<string> errors) where T : UnityEngine.Object

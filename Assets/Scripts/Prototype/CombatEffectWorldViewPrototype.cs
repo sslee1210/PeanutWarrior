@@ -8,17 +8,18 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Procedural placeholder effects for basic attacks and the eight skills.
-    /// Effect GameObjects are pooled instead of repeatedly created and destroyed.
+    /// Displays the eight illustrated skill effects supplied by
+    /// ProceduralBattleArtPrototype. Pooled SpriteRenderers are reused to avoid
+    /// allocations during automatic combat.
     /// </summary>
-    [DefaultExecutionOrder(17500)]
+    [DefaultExecutionOrder(26000)]
     public sealed class CombatEffectWorldViewPrototype : MonoBehaviour
     {
         private sealed class EffectView
         {
             public GameObject Root;
             public SpriteRenderer Renderer;
-            public bool IsRing;
+            public bool IsRingPool;
         }
 
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -28,25 +29,23 @@ namespace PeanutWarrior.Prototype
         private const float SourceBottom = 425f;
         private const float WorldHalfWidth = 8.2f;
         private const float WorldHalfHeight = 4.2f;
-        private const int RingPrewarmCount = 8;
-        private const int SlashPrewarmCount = 18;
+        private const int RingPrewarmCount = 10;
+        private const int SlashPrewarmCount = 20;
+
+        private readonly Queue<EffectView> ringPool = new Queue<EffectView>();
+        private readonly Queue<EffectView> slashPool = new Queue<EffectView>();
+        private readonly float[] previousSkillCooldowns = new float[8];
 
         private CombatPrototypeArena arena;
         private StageFlowController stageFlow;
         private RuntimeWorldViewPrototype worldView;
+        private ProceduralBattleArtPrototype rasterArt;
         private FieldInfo playerPositionField;
         private FieldInfo attackCooldownField;
         private FieldInfo skillCooldownsField;
-        private FieldInfo huntingElementField;
-        private FieldInfo bossElementField;
         private FieldInfo worldRootField;
-        private float previousAttackCooldown;
-        private readonly float[] previousSkillCooldowns = new float[8];
-        private Sprite circleSprite;
-        private Sprite slashSprite;
         private Transform effectRoot;
-        private readonly Queue<EffectView> ringPool = new Queue<EffectView>();
-        private readonly Queue<EffectView> slashPool = new Queue<EffectView>();
+        private float previousAttackCooldown;
         private int activeEffectCount;
 
         public int ActiveEffectCount => activeEffectCount;
@@ -57,7 +56,7 @@ namespace PeanutWarrior.Prototype
         private static void Create()
         {
             if (FindFirstObjectByType<CombatEffectWorldViewPrototype>() != null) return;
-            GameObject root = new GameObject("PeanutWarriorCombatEffectWorldViewPrototype");
+            GameObject root = new GameObject("Peanut Illustrated Combat Effects");
             DontDestroyOnLoad(root);
             root.AddComponent<CombatEffectWorldViewPrototype>();
         }
@@ -68,8 +67,24 @@ namespace PeanutWarrior.Prototype
             arena = FindFirstObjectByType<CombatPrototypeArena>();
             stageFlow = FindFirstObjectByType<StageFlowController>();
             worldView = FindFirstObjectByType<RuntimeWorldViewPrototype>();
-            if (arena == null || stageFlow == null || worldView == null)
+            rasterArt = FindFirstObjectByType<ProceduralBattleArtPrototype>();
+
+            if (arena == null || stageFlow == null || worldView == null || rasterArt == null)
             {
+                Debug.LogError("[PeanutEffects] Required combat or raster-art system is missing.");
+                enabled = false;
+                yield break;
+            }
+
+            int waitFrames = 0;
+            while (!rasterArt.ArtReady && waitFrames < 120)
+            {
+                waitFrames++;
+                yield return null;
+            }
+            if (!rasterArt.ArtReady)
+            {
+                Debug.LogError("[PeanutEffects] Raster effect sprites were not initialized.");
                 enabled = false;
                 yield break;
             }
@@ -78,13 +93,10 @@ namespace PeanutWarrior.Prototype
             playerPositionField = arenaType.GetField("playerPosition", PrivateInstance);
             attackCooldownField = arenaType.GetField("playerAttackCooldown", PrivateInstance);
             skillCooldownsField = arenaType.GetField("skillCooldowns", PrivateInstance);
-            huntingElementField = arenaType.GetField("huntingElement", PrivateInstance);
-            bossElementField = arenaType.GetField("bossElement", PrivateInstance);
             worldRootField = typeof(RuntimeWorldViewPrototype).GetField("worldRoot", PrivateInstance);
 
-            CreateSprites();
             GameObject worldRoot = worldRootField?.GetValue(worldView) as GameObject;
-            GameObject rootObject = new GameObject("Combat Effects");
+            GameObject rootObject = new GameObject("Illustrated Combat Effects");
             rootObject.transform.SetParent(worldRoot != null ? worldRoot.transform : transform, false);
             effectRoot = rootObject.transform;
             PrewarmPools();
@@ -93,72 +105,36 @@ namespace PeanutWarrior.Prototype
             float[] cooldowns = ReadCooldowns();
             if (cooldowns != null)
                 Array.Copy(cooldowns, previousSkillCooldowns, Mathf.Min(cooldowns.Length, previousSkillCooldowns.Length));
-        }
 
-        private void CreateSprites()
-        {
-            circleSprite = CreateCircleSprite(96);
-            Texture2D slash = new Texture2D(96, 24, TextureFormat.RGBA32, false);
-            slash.name = "ProceduralSlash";
-            slash.filterMode = FilterMode.Bilinear;
-            for (int y = 0; y < slash.height; y++)
-            {
-                for (int x = 0; x < slash.width; x++)
-                {
-                    float vertical = 1f - Mathf.Abs((y / (slash.height - 1f)) * 2f - 1f);
-                    float horizontal = Mathf.Sin((x / (slash.width - 1f)) * Mathf.PI);
-                    float alpha = Mathf.Pow(Mathf.Clamp01(vertical * horizontal), 1.8f);
-                    slash.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
-                }
-            }
-            slash.Apply();
-            slashSprite = Sprite.Create(slash, new Rect(0f, 0f, slash.width, slash.height), new Vector2(0.5f, 0.5f), 48f);
-        }
-
-        private static Sprite CreateCircleSprite(int size)
-        {
-            Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            texture.name = "ProceduralSkillCircle";
-            texture.filterMode = FilterMode.Bilinear;
-            Vector2 center = Vector2.one * (size - 1) * 0.5f;
-            float radius = size * 0.47f;
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float normalized = Vector2.Distance(new Vector2(x, y), center) / radius;
-                    float alpha = normalized <= 1f ? Mathf.Clamp01(1f - normalized) * 0.28f : 0f;
-                    if (normalized > 0.78f && normalized <= 1f) alpha = Mathf.Max(alpha, 0.72f);
-                    texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
-                }
-            }
-            texture.Apply();
-            return Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), size);
+            Debug.Log("[PeanutEffects] Eight illustrated combat effects connected.");
         }
 
         private void PrewarmPools()
         {
-            for (int i = 0; i < RingPrewarmCount; i++)
+            for (int index = 0; index < RingPrewarmCount; index++)
                 ringPool.Enqueue(CreateEffectView(true));
-            for (int i = 0; i < SlashPrewarmCount; i++)
+            for (int index = 0; index < SlashPrewarmCount; index++)
                 slashPool.Enqueue(CreateEffectView(false));
         }
 
-        private EffectView CreateEffectView(bool ring)
+        private EffectView CreateEffectView(bool ringPoolView)
         {
-            GameObject go = new GameObject(ring ? "Pooled Skill Ring" : "Pooled Skill Slash");
-            go.transform.SetParent(effectRoot, false);
-            SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-            renderer.sprite = ring ? circleSprite : slashSprite;
-            renderer.sortingOrder = ring ? 16 : 17;
-            go.SetActive(false);
-            return new EffectView { Root = go, Renderer = renderer, IsRing = ring };
+            GameObject effect = new GameObject(ringPoolView ? "Pooled Illustrated Burst" : "Pooled Illustrated Slash");
+            effect.transform.SetParent(effectRoot, false);
+            SpriteRenderer renderer = effect.AddComponent<SpriteRenderer>();
+            renderer.sprite = rasterArt.GetEffectSprite(ringPoolView ? 4 : 0);
+            renderer.color = Color.white;
+            renderer.sortingOrder = ringPoolView ? 17 : 18;
+            effect.SetActive(false);
+            return new EffectView { Root = effect, Renderer = renderer, IsRingPool = ringPoolView };
         }
 
-        private EffectView Acquire(bool ring)
+        private EffectView Acquire(bool ringPoolView, int effectIndex)
         {
-            Queue<EffectView> pool = ring ? ringPool : slashPool;
-            EffectView view = pool.Count > 0 ? pool.Dequeue() : CreateEffectView(ring);
+            Queue<EffectView> pool = ringPoolView ? ringPool : slashPool;
+            EffectView view = pool.Count > 0 ? pool.Dequeue() : CreateEffectView(ringPoolView);
+            view.Renderer.sprite = rasterArt.GetEffectSprite(effectIndex);
+            view.Renderer.color = Color.white;
             view.Root.SetActive(true);
             activeEffectCount++;
             return view;
@@ -173,13 +149,13 @@ namespace PeanutWarrior.Prototype
             view.Root.transform.localRotation = Quaternion.identity;
             view.Root.transform.localScale = Vector3.one;
             activeEffectCount = Mathf.Max(0, activeEffectCount - 1);
-            if (view.IsRing) ringPool.Enqueue(view);
+            if (view.IsRingPool) ringPool.Enqueue(view);
             else slashPool.Enqueue(view);
         }
 
         private void Update()
         {
-            if (effectRoot == null) return;
+            if (effectRoot == null || rasterArt == null || !rasterArt.ArtReady) return;
             DetectBasicAttack();
             DetectSkills();
         }
@@ -190,7 +166,16 @@ namespace PeanutWarrior.Prototype
             bool started = current > previousAttackCooldown + 0.18f;
             previousAttackCooldown = current;
             if (!started) return;
-            SpawnSlash(PlayerWorldPosition, ElementColor(ActiveElement), 1.2f, UnityEngine.Random.Range(-24f, 24f));
+
+            Spawn(
+                false,
+                0,
+                PlayerWorldPosition + new Vector3(0.45f, 0.08f, 0f),
+                0.8f,
+                2.0f,
+                0.24f,
+                UnityEngine.Random.Range(-24f, 24f),
+                22f);
         }
 
         private void DetectSkills()
@@ -198,69 +183,103 @@ namespace PeanutWarrior.Prototype
             float[] cooldowns = ReadCooldowns();
             if (cooldowns == null || cooldowns.Length < 8) return;
             int activeStart = stageFlow.Phase == StageFlowPhase.BossBattle ? 4 : 0;
-            for (int i = 0; i < cooldowns.Length && i < previousSkillCooldowns.Length; i++)
+            for (int index = 0; index < cooldowns.Length && index < previousSkillCooldowns.Length; index++)
             {
-                bool cast = i >= activeStart && i < activeStart + 4 && cooldowns[i] > previousSkillCooldowns[i] + 1f;
-                previousSkillCooldowns[i] = cooldowns[i];
-                if (cast) SpawnSkillEffect(i % 4);
+                bool cast = index >= activeStart && index < activeStart + 4 &&
+                    cooldowns[index] > previousSkillCooldowns[index] + 1f;
+                previousSkillCooldowns[index] = cooldowns[index];
+                if (cast) SpawnSkillEffect(index);
             }
         }
 
-        private void SpawnSkillEffect(int localIndex)
+        private void SpawnSkillEffect(int skillIndex)
         {
-            Color color = ElementColor(ActiveElement);
-            Vector3 position = PlayerWorldPosition;
-            switch (localIndex)
+            Vector3 origin = PlayerWorldPosition;
+            switch (skillIndex)
             {
                 case 0:
-                    SpawnRing(position, color, 0.7f, 4.2f, 0.48f);
+                    Spawn(false, 0, origin + Vector3.right * 0.5f, 1.1f, 3.3f, 0.42f, -12f, 120f);
                     break;
                 case 1:
-                    for (int i = 0; i < 5; i++)
-                        SpawnSlash(position + (Vector3)(UnityEngine.Random.insideUnitCircle * 1.1f), color, 1.3f, i * 34f - 68f);
+                    for (int index = 0; index < 4; index++)
+                    {
+                        Vector3 offset = new Vector3((index - 1.5f) * 0.65f, Mathf.Abs(index - 1.5f) * 0.18f, 0f);
+                        Spawn(false, 1, origin + offset, 0.8f, 2.1f, 0.34f + index * 0.025f, -42f + index * 28f, 35f);
+                    }
                     break;
                 case 2:
-                    SpawnRing(position, color, 0.4f, 2.6f, 0.38f);
-                    for (int i = 0; i < 3; i++)
-                        SpawnSlash(position + new Vector3(i - 1f, 0.25f * i, 0f), color, 1.0f, 25f - i * 25f);
+                    Spawn(true, 2, origin, 0.9f, 4.2f, 0.5f, 0f, 8f);
+                    break;
+                case 3:
+                    for (int index = 0; index < 7; index++)
+                    {
+                        Vector3 rainPosition = origin + new Vector3((index - 3f) * 0.65f, 1.5f - Mathf.Abs(index - 3f) * 0.12f, 0f);
+                        Spawn(false, 3, rainPosition, 0.7f, 1.75f, 0.46f, -10f + index * 3f, 0f);
+                    }
+                    break;
+                case 4:
+                    Spawn(true, 4, origin, 1.0f, 5.2f, 0.62f, 0f, 80f);
+                    break;
+                case 5:
+                    for (int index = 0; index < 6; index++)
+                    {
+                        Vector3 offset = (Vector3)(UnityEngine.Random.insideUnitCircle * 1.3f);
+                        Spawn(false, 5, origin + offset, 0.85f, 2.35f, 0.38f, index * 31f, 80f);
+                    }
+                    break;
+                case 6:
+                    Spawn(true, 6, origin, 0.8f, 4.4f, 0.68f, 0f, -35f);
+                    StartCoroutine(SpawnEchoes(6, origin));
                     break;
                 default:
-                    SpawnRing(Vector3.zero, color, 1f, 12f, 0.65f);
+                    Spawn(true, 7, Vector3.zero, 1.7f, 12.5f, 0.86f, 0f, 130f);
                     break;
             }
         }
 
-        private void SpawnRing(Vector3 position, Color color, float startScale, float endScale, float duration)
+        private IEnumerator SpawnEchoes(int effectIndex, Vector3 origin)
         {
-            EffectView view = Acquire(true);
-            view.Root.transform.position = position;
-            view.Root.transform.rotation = Quaternion.identity;
-            view.Renderer.color = new Color(color.r, color.g, color.b, 0.78f);
-            StartCoroutine(AnimateEffect(view, startScale, endScale, duration, 0f));
+            for (int index = 0; index < 3; index++)
+            {
+                yield return new WaitForSeconds(0.09f);
+                Spawn(true, effectIndex, origin, 1.1f + index * 0.45f, 3.2f + index * 0.5f, 0.44f, 0f, index % 2 == 0 ? 45f : -45f);
+            }
         }
 
-        private void SpawnSlash(Vector3 position, Color color, float scale, float angle)
+        private void Spawn(
+            bool ringPoolView,
+            int effectIndex,
+            Vector3 position,
+            float startScale,
+            float endScale,
+            float duration,
+            float angle,
+            float rotationSpeed)
         {
-            EffectView view = Acquire(false);
+            EffectView view = Acquire(ringPoolView, effectIndex);
             view.Root.transform.position = position;
             view.Root.transform.rotation = Quaternion.Euler(0f, 0f, angle);
-            view.Renderer.color = new Color(color.r, color.g, color.b, 0.92f);
-            StartCoroutine(AnimateEffect(view, scale * 0.45f, scale * 1.45f, 0.26f, 18f));
+            StartCoroutine(AnimateEffect(view, startScale, endScale, duration, rotationSpeed));
         }
 
-        private IEnumerator AnimateEffect(EffectView view, float from, float to, float duration, float rotationSpeed)
+        private IEnumerator AnimateEffect(
+            EffectView view,
+            float from,
+            float to,
+            float duration,
+            float rotationSpeed)
         {
             float elapsed = 0f;
             while (elapsed < duration && view != null && view.Root != null && view.Root.activeSelf)
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
-                float scale = Mathf.Lerp(from, to, 1f - Mathf.Pow(1f - t, 2f));
-                view.Root.transform.localScale = Vector3.one * scale;
+                float eased = 1f - Mathf.Pow(1f - t, 3f);
+                view.Root.transform.localScale = Vector3.one * Mathf.Lerp(from, to, eased);
                 view.Root.transform.Rotate(0f, 0f, rotationSpeed * Time.deltaTime);
-                Color current = view.Renderer.color;
-                current.a = 1f - t;
-                view.Renderer.color = current;
+                Color color = Color.white;
+                color.a = Mathf.Clamp01(1f - t * t);
+                view.Renderer.color = color;
                 yield return null;
             }
             Release(view);
@@ -276,15 +295,6 @@ namespace PeanutWarrior.Prototype
             return skillCooldownsField?.GetValue(arena) as float[];
         }
 
-        private int ActiveElement
-        {
-            get
-            {
-                FieldInfo field = stageFlow.Phase == StageFlowPhase.BossBattle ? bossElementField : huntingElementField;
-                return field == null ? 0 : Mathf.Clamp(Convert.ToInt32(field.GetValue(arena)), 0, 3);
-            }
-        }
-
         private Vector3 PlayerWorldPosition
         {
             get
@@ -296,17 +306,6 @@ namespace PeanutWarrior.Prototype
                 float y = Mathf.Lerp(WorldHalfHeight, -WorldHalfHeight, Mathf.InverseLerp(SourceTop, SourceBottom, source.y));
                 return new Vector3(x, y, 0f);
             }
-        }
-
-        private static Color ElementColor(int element)
-        {
-            return element switch
-            {
-                1 => new Color(1f, 0.26f, 0.08f),
-                2 => new Color(0.30f, 0.82f, 1f),
-                3 => new Color(0.76f, 0.46f, 1f),
-                _ => new Color(1f, 0.92f, 0.45f)
-            };
         }
     }
 }

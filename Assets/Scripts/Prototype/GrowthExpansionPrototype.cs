@@ -5,10 +5,6 @@ using UnityEngine;
 
 namespace PeanutWarrior.Prototype
 {
-    /// <summary>
-    /// Owns the final ten-stat growth values that are not stored directly in the combat
-    /// arena. It also manages player EXP, HP regeneration and equipment material income.
-    /// </summary>
     public sealed class GrowthExpansionPrototype : MonoBehaviour
     {
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -144,6 +140,30 @@ namespace PeanutWarrior.Prototype
             AddExperience(experience);
             equipmentEnhancementMaterials += materials;
             message = $"방치 {Mathf.Max(0, offlineMinutes)}분 · EXP +{experience:N0}, 장비 강화 재료 +{materials:N0}";
+            Save();
+        }
+
+        public bool TrySpendEquipmentMaterials(int amount)
+        {
+            amount = Mathf.Max(0, amount);
+            if (amount == 0) return true;
+            if (equipmentEnhancementMaterials < amount)
+            {
+                message = $"장비 강화 재료 부족 · {amount:N0}개 필요";
+                return false;
+            }
+
+            equipmentEnhancementMaterials -= amount;
+            message = $"장비 강화 재료 {amount:N0}개 사용";
+            Save();
+            return true;
+        }
+
+        public void AddEquipmentMaterials(int amount)
+        {
+            if (amount <= 0) return;
+            equipmentEnhancementMaterials += amount;
+            message = $"장비 강화 재료 +{amount:N0}";
             Save();
         }
 

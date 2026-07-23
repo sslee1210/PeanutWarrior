@@ -26,7 +26,7 @@ namespace PeanutWarrior.Prototype
 
         private IEnumerator Start()
         {
-            for (int i = 0; i < 36; i++) yield return null;
+            for (int i = 0; i < 42; i++) yield return null;
 
             var errors = new List<string>();
             RequireSingle<IdleSystemsPrototype>(errors);
@@ -34,6 +34,8 @@ namespace PeanutWarrior.Prototype
             RequireSingle<MiniPeanutWorldViewPrototype>(errors);
             RequireSingle<PeanutSkillMenuV6>(errors);
             RequireSingle<BattleSkillDockV6>(errors);
+            RequireSingle<SpectacularPeanutSkillCombatPrototype>(errors);
+            RequireSingle<SpectacularPeanutSkillWorldViewPrototype>(errors);
             RequireSingle<MenuLayoutCoordinatorV6>(errors);
             RequireSingle<PeanutMenuLayoutV4>(errors);
             RequireSingle<PeanutEquipmentAndShopMenuV5>(errors);
@@ -53,7 +55,7 @@ namespace PeanutWarrior.Prototype
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · equipment uses a left catalog and right detailed weapon view, hunting and boss effects show full combat values, and execution remains capped at 0.001%.");
+                    "PASS · eight spectacular peanut sword arts use distinct combat executions, costs, cooldowns and visual sequences; equipment detail and extreme execution rules remain connected.");
                 yield break;
             }
 
@@ -115,13 +117,46 @@ namespace PeanutWarrior.Prototype
                 if (!menu.ShowsAccurateDamageDetails) errors.Add("Skill detail window must show real combat values.");
             }
 
-            Type skillType = typeof(SkillManagementPrototype);
-            if (skillType.GetMethod("GetSkillDescription", PublicInstance) == null)
-                errors.Add("Skill description API is missing.");
-            if (skillType.GetMethod("GetSkillTotalDamage", PublicInstance) == null)
-                errors.Add("Skill damage detail API is missing.");
-            if (skillType.GetMethod("GetSkillCombatSummary", PublicInstance) == null)
-                errors.Add("Skill combat summary API is missing.");
+            SkillManagementPrototype skills = FindFirstObjectByType<SkillManagementPrototype>();
+            if (skills != null)
+            {
+                if (skills.ConfirmedSkillCount != 8) errors.Add("Exactly eight confirmed skills are required.");
+                if (!skills.UsesDistinctSkillTimings) errors.Add("Every skill must use its own MP and cooldown values.");
+                if (!skills.UsesSpectacularPeanutSwordArts) errors.Add("Skills must use the confirmed spectacular peanut sword-art set.");
+
+                string[] expected =
+                {
+                    "껍질 회전참", "낙화검우", "지맥꼬투리진", "왕실 꼬투리 천개",
+                    "갑각해방", "땅콩 연환검", "낙화귀근", "황금핵 천단"
+                };
+                for (int i = 0; i < expected.Length; i++)
+                {
+                    if (skills.GetSkillName(i) != expected[i]) errors.Add("Unexpected skill name at index " + i + ".");
+                    if (string.IsNullOrWhiteSpace(skills.GetSkillDescription(i))) errors.Add("Skill description is missing at index " + i + ".");
+                    if (skills.GetSkillMpCost(i) <= 0f) errors.Add("Skill MP cost is invalid at index " + i + ".");
+                    if (skills.GetSkillBaseCooldown(i) <= 0f) errors.Add("Skill cooldown is invalid at index " + i + ".");
+                }
+            }
+
+            SpectacularPeanutSkillCombatPrototype combat = FindFirstObjectByType<SpectacularPeanutSkillCombatPrototype>();
+            if (combat != null)
+            {
+                if (!combat.UsesEightDistinctSkillExecutions)
+                    errors.Add("The eight skills must use distinct combat executions.");
+                if (!combat.CorrectsLegacySkillCostsAndCooldowns)
+                    errors.Add("Legacy shared costs and cooldowns must be corrected at cast time.");
+                if (!combat.UsesHuntingAreaAndBossFocusRoles)
+                    errors.Add("Hunting skills must use area roles and boss skills must focus the boss.");
+            }
+
+            SpectacularPeanutSkillWorldViewPrototype visuals = FindFirstObjectByType<SpectacularPeanutSkillWorldViewPrototype>();
+            if (visuals != null)
+            {
+                if (!visuals.UsesEightUniqueSpectacleSequences)
+                    errors.Add("Each skill must have a unique spectacle sequence.");
+                if (!visuals.ReplacesLegacyGenericSkillEffects)
+                    errors.Add("Legacy generic skill effects must not remain the active renderer.");
+            }
 
             BattleSkillDockV6 dock = FindFirstObjectByType<BattleSkillDockV6>();
             if (dock != null)
@@ -186,14 +221,14 @@ namespace PeanutWarrior.Prototype
                 }
             }
 
-            LoadoutBonusCombatPrototype combat = FindFirstObjectByType<LoadoutBonusCombatPrototype>();
-            if (combat != null)
+            LoadoutBonusCombatPrototype equipmentCombat = FindFirstObjectByType<LoadoutBonusCombatPrototype>();
+            if (equipmentCombat != null)
             {
-                if (!combat.UsesHuntingMultiTargetPatterns)
+                if (!equipmentCombat.UsesHuntingMultiTargetPatterns)
                     errors.Add("Equipment combat must apply hunting multi-target patterns.");
-                if (!combat.UsesBossSingleTargetPatterns)
+                if (!equipmentCombat.UsesBossSingleTargetPatterns)
                     errors.Add("Equipment combat must apply boss single-target patterns.");
-                if (!combat.ExecutionKillsBossOnExtremeChance)
+                if (!equipmentCombat.ExecutionKillsBossOnExtremeChance)
                     errors.Add("Execution success must remove the boss's remaining HP.");
             }
 

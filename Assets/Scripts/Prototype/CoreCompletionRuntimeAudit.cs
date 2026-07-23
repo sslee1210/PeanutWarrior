@@ -31,6 +31,9 @@ namespace PeanutWarrior.Prototype
             RequireSingle<OfflineRewardPopupPrototype>(errors);
             RequireSingle<CoreShopProgressionPrototype>(errors);
             RequireSingle<PeanutCoreMenuCompletionV3>(errors);
+            RequireSingle<PeanutMenuLayoutV4>(errors);
+            RequireSingle<BottomNavigationOrderV4>(errors);
+            RequireSingle<ElementEquipmentCatalogPrototype>(errors);
             RequireSingle<AdvancementWorldViewPrototype>(errors);
             RequireSingle<MiniPeanutWorldViewPrototype>(errors);
             RequireSingle<SaveLoadBattlefieldSync>(errors);
@@ -46,6 +49,9 @@ namespace PeanutWarrior.Prototype
                 errors.Add("Offline reward cap must remain eight hours.");
             if (PeanutGameRules.AdvancementCount != 8)
                 errors.Add("Expected eight advancement definitions.");
+            for (int i = 0; i < PeanutGameRules.AdvancementCount; i++)
+                if (!PeanutGameRules.GetAdvancement(i).Name.EndsWith("땅콩"))
+                    errors.Add("Every advancement name must end with 땅콩.");
             if (string.IsNullOrEmpty(PeanutGameRules.GetWorldName(1)) || string.IsNullOrEmpty(PeanutGameRules.GetBossName(1)))
                 errors.Add("World or boss name rules are empty.");
 
@@ -70,6 +76,15 @@ namespace PeanutWarrior.Prototype
                         if (stars[i] < 1 || stars[i] > 5) errors.Add("Pet star value is outside 1..5.");
             }
 
+            ElementEquipmentCatalogPrototype catalog = FindFirstObjectByType<ElementEquipmentCatalogPrototype>();
+            if (catalog != null)
+            {
+                if (catalog.TotalItemCount != 48)
+                    errors.Add("Element equipment catalog must contain 48 items.");
+                if (catalog.VariantsPerGrade != 3)
+                    errors.Add("Each element and rarity must contain three equipment variants.");
+            }
+
             GameSettingsPrototype settings = FindFirstObjectByType<GameSettingsPrototype>();
             if (settings != null)
             {
@@ -88,12 +103,16 @@ namespace PeanutWarrior.Prototype
                 if (restore == null) errors.Add("Backup restore method is missing.");
             }
 
-            PeanutCoreMenuCompletionV3 menu = FindFirstObjectByType<PeanutCoreMenuCompletionV3>();
-            if (menu != null)
+            PeanutMenuLayoutV4 menuV4 = FindFirstObjectByType<PeanutMenuLayoutV4>();
+            if (menuV4 != null)
             {
-                if (menu.CompletedPageCount != 4) errors.Add("Expected four completed core menu pages.");
-                if (!menu.LeavesSkillsAndEquipmentUntouched)
-                    errors.Add("Skill and equipment pages must remain untouched.");
+                if (menuV4.LayoutVersion != 4) errors.Add("Menu layout version must be 4.");
+                if (menuV4.BottomMenuOrder != "성장 → 장비 → 스킬 → 펫 → 전직 → 상점")
+                    errors.Add("Bottom navigation order is incorrect.");
+                if (!menuV4.UsesCircularSkillLayout) errors.Add("Skill page must use circular skill buttons.");
+                if (!menuV4.UsesElementEquipmentTabs) errors.Add("Equipment page must use elemental tabs.");
+                if (!menuV4.UsesSplitGrowthLayout) errors.Add("Growth page must split profile and upgrades.");
+                if (!menuV4.UsesPerTierAdvancementButtons) errors.Add("Advancement rows need individual buttons.");
             }
 
             AdvancementWorldViewPrototype advancementView = FindFirstObjectByType<AdvancementWorldViewPrototype>();
@@ -107,12 +126,15 @@ namespace PeanutWarrior.Prototype
             MethodInfo offlineGrant = typeof(GrowthExpansionPrototype).GetMethod(
                 "GrantOfflineProgress", BindingFlags.Instance | BindingFlags.Public);
             if (offlineGrant == null) errors.Add("Growth offline reward entry point is missing.");
+            MethodInfo materialSpend = typeof(GrowthExpansionPrototype).GetMethod(
+                "TrySpendEquipmentMaterials", BindingFlags.Instance | BindingFlags.Public);
+            if (materialSpend == null) errors.Add("Equipment material spending entry point is missing.");
 
             if (errors.Count == 0)
             {
                 Debug.Log(
                     "[PeanutWarrior Core Completion Audit]\n" +
-                    "PASS · advancement, pets, stage rules, idle boss, growth, offline rewards and popup, shop, settings, JSON save, battlefield sync, completed visuals and core menu V3 are active. SKILL and equipment remain intentionally deferred.");
+                    "PASS · menu V4, reordered navigation, circular split skill page, elemental 48-item equipment catalog, split growth page and per-tier advancement list are active.");
                 yield break;
             }
 

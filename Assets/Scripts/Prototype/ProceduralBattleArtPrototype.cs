@@ -9,9 +9,11 @@ using UnityEngine;
 namespace PeanutWarrior.Prototype
 {
     /// <summary>
-    /// Applies the illustrated atlas directly to RuntimeWorldViewPrototype's real
-    /// SpriteRenderers. This avoids the previous name-scanning overlay path, which
-    /// could fail silently and leave the original circles visible.
+    /// Loads the illustrated battle atlas and applies it directly to the real
+    /// RuntimeWorldViewPrototype SpriteRenderers. The atlas loader deliberately
+    /// removes invalid characters and per-chunk padding before rebuilding one
+    /// valid Base64 payload, so Git line endings or chunk boundaries cannot leave
+    /// the original circle placeholders visible.
     /// </summary>
     [DefaultExecutionOrder(25000)]
     public sealed class ProceduralBattleArtPrototype : MonoBehaviour
@@ -20,6 +22,7 @@ namespace PeanutWarrior.Prototype
         private const BindingFlags PublicInstance = BindingFlags.Instance | BindingFlags.Public;
         private const int AtlasColumns = 6;
         private const int AtlasRows = 4;
+        private const int AtlasChunkCount = 8;
         private const float WorldTileSize = 1.45f;
 
         private RuntimeWorldViewPrototype worldView;
@@ -28,7 +31,7 @@ namespace PeanutWarrior.Prototype
         private FieldInfo enemyViewsField;
         private FieldInfo worldRootField;
 
-        private readonly Sprite[] atlasSprites = new Sprite[24];
+        private readonly Sprite[] atlasSprites = new Sprite[AtlasColumns * AtlasRows];
         private readonly HashSet<int> cleanedRoots = new HashSet<int>();
         private readonly List<Transform> companions = new List<Transform>();
 
@@ -45,6 +48,7 @@ namespace PeanutWarrior.Prototype
         private static void Install()
         {
             if (FindFirstObjectByType<ProceduralBattleArtPrototype>() != null) return;
+
             GameObject root = new GameObject("Peanut Direct Battle Art Binder");
             DontDestroyOnLoad(root);
             root.AddComponent<ProceduralBattleArtPrototype>();
@@ -53,17 +57,15 @@ namespace PeanutWarrior.Prototype
         private void Awake()
         {
             atlasReady = LoadAtlas();
-            if (!atlasReady)
-            {
-                Debug.LogError("[PeanutArt] Illustrated atlas could not be loaded. Original circles will remain visible.");
-                enabled = false;
-            }
+            if (atlasReady) return;
+
+            Debug.LogError("[PeanutArt] Illustrated atlas could not be loaded.");
+            enabled = false;
         }
 
         private void LateUpdate()
         {
-            if (!atlasReady) return;
-            if (!ResolveRuntimeView()) return;
+            if (!atlasReady || !ResolveRuntimeView()) return;
 
             ApplyPlayerArt();
             ApplyEnemyArt();
@@ -74,8 +76,9 @@ namespace PeanutWarrior.Prototype
 
         private bool LoadAtlas()
         {
-            StringBuilder encoded = new StringBuilder(90112);
-            for (int index = 0; index < 8; index++)
+            StringBuilder sanitized = new StringBuilder(100000);
+
+            for (int index = 0; index < AtlasChunkCount; index++)
             {
                 string path = $"PeanutWarrior/AtlasChunks/peanut_battle_atlas_{index:00}";
                 TextAsset chunk = Resources.Load<TextAsset>(path);
@@ -84,15 +87,40 @@ namespace PeanutWarrior.Prototype
                     Debug.LogError($"[PeanutArt] Missing Resources asset: {path}");
                     return false;
                 }
-                encoded.Append(chunk.text.Trim());
+
+                AppendBase64Payload(sanitized, chunk.text);
             }
+
+            if (sanitized.Length == 0)
+            {
+                Debug.LogError("[PeanutArt] Atlas payload is empty after sanitizing the chunks.");
+                return false;
+            }
+
+            int remainder = sanitized.Length % 4;
+            if (remainder == 1)
+            {
+                Debug.LogError($"[PeanutArt] Atlas payload has an unrecoverable Base64 length: {sanitized.Length}.");
+                return false;
+            }
+
+            if (remainder > 0)
+                sanitized.Append('=', 4 - remainder);
 
             try
             {
-                byte[] bytes = System.Convert.FromBase64String(encoded.ToString());
+                byte[] bytes = Convert.FromBase64String(sanitized.ToString());
+                if (!HasPngSignature(bytes))
+                {
+                    Debug.LogError($"[PeanutArt] Decoded atlas is not a PNG. Byte count: {bytes.Length}.");
+                    return false;
+                }
+
                 atlasTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false)
                 {
-                    name = "Peanut Battle Atlas"
+                    name = "Peanut Battle Atlas",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp
                 };
 
                 if (!atlasTexture.LoadImage(bytes, false))
@@ -101,24 +129,24 @@ namespace PeanutWarrior.Prototype
                     return false;
                 }
             }
-            catch (System.Exception exception)
+            catch (Exception exception)
             {
-                Debug.LogError($"[PeanutArt] Atlas decode failed: {exception}");
+                Debug.LogError($"[PeanutArt] Atlas decode failed after sanitizing: {exception}");
                 return false;
             }
 
-            atlasTexture.filterMode = FilterMode.Bilinear;
-            atlasTexture.wrapMode = TextureWrapMode.Clamp;
+            if (atlasTexture.width % AtlasColumns != 0 || atlasTexture.height % AtlasRows != 0)
+            {
+                Debug.LogError(
+                    $"[PeanutArt] Atlas size {atlasTexture.width}x{atlasTexture.height} is not divisible by " +
+                    $"{AtlasColumns} columns and {AtlasRows} rows.");
+                return false;
+            }
 
             int tileWidth = atlasTexture.width / AtlasColumns;
             int tileHeight = atlasTexture.height / AtlasRows;
-            if (tileWidth <= 0 || tileHeight <= 0)
-            {
-                Debug.LogError($"[PeanutArt] Invalid atlas size: {atlasTexture.width}x{atlasTexture.height}");
-                return false;
-            }
-
             float pixelsPerUnit = tileWidth / WorldTileSize;
+
             for (int index = 0; index < atlasSprites.Length; index++)
             {
                 int column = index % AtlasColumns;
@@ -136,8 +164,44 @@ namespace PeanutWarrior.Prototype
                 atlasSprites[index].name = $"PeanutBattleSprite_{index:00}";
             }
 
-            Debug.Log($"[PeanutArt] Atlas loaded: {atlasTexture.width}x{atlasTexture.height}, 24 sprites ready.");
+            Debug.Log(
+                $"[PeanutArt] Atlas loaded: {atlasTexture.width}x{atlasTexture.height}, " +
+                $"{atlasSprites.Length} sprites ready, sanitized payload {sanitized.Length} chars.");
             return true;
+        }
+
+        private static void AppendBase64Payload(StringBuilder destination, string source)
+        {
+            if (string.IsNullOrEmpty(source)) return;
+
+            for (int index = 0; index < source.Length; index++)
+            {
+                char value = source[index];
+                bool alphaNumeric =
+                    (value >= 'A' && value <= 'Z') ||
+                    (value >= 'a' && value <= 'z') ||
+                    (value >= '0' && value <= '9');
+
+                if (alphaNumeric || value == '+' || value == '/')
+                    destination.Append(value);
+
+                // '=' is intentionally discarded here. Padding is valid only once,
+                // at the end of the complete payload, and is rebuilt after all chunks.
+            }
+        }
+
+        private static bool HasPngSignature(byte[] bytes)
+        {
+            return bytes != null &&
+                   bytes.Length >= 8 &&
+                   bytes[0] == 0x89 &&
+                   bytes[1] == 0x50 &&
+                   bytes[2] == 0x4E &&
+                   bytes[3] == 0x47 &&
+                   bytes[4] == 0x0D &&
+                   bytes[5] == 0x0A &&
+                   bytes[6] == 0x1A &&
+                   bytes[7] == 0x0A;
         }
 
         private bool ResolveRuntimeView()
@@ -153,7 +217,7 @@ namespace PeanutWarrior.Prototype
 
             if (!reflectionReady)
             {
-                System.Type type = typeof(RuntimeWorldViewPrototype);
+                Type type = typeof(RuntimeWorldViewPrototype);
                 playerViewField = type.GetField("playerView", PrivateInstance);
                 enemyViewsField = type.GetField("enemyViews", PrivateInstance);
                 worldRootField = type.GetField("worldRoot", PrivateInstance);
@@ -173,12 +237,16 @@ namespace PeanutWarrior.Prototype
 
             if (environmentRoot == null)
             {
-                Transform existing = worldRoot.transform.Find("Illustrated Stage Environment");
-                if (existing != null) Destroy(existing.gameObject);
+                Transform oldEnvironment = worldRoot.transform.Find("Illustrated Stage Environment");
+                if (oldEnvironment != null) Destroy(oldEnvironment.gameObject);
+
+                Transform directEnvironment = worldRoot.transform.Find("Direct Illustrated Stage Environment");
+                if (directEnvironment != null) Destroy(directEnvironment.gameObject);
 
                 environmentRoot = new GameObject("Direct Illustrated Stage Environment").transform;
                 environmentRoot.SetParent(worldRoot.transform, false);
                 worldCamera = Camera.main;
+                currentTheme = -1;
             }
 
             return true;
@@ -200,28 +268,27 @@ namespace PeanutWarrior.Prototype
             IDictionary views = enemyViewsField.GetValue(worldView) as IDictionary;
             if (views == null) return;
 
-            int index = 0;
+            int fallbackIndex = 0;
             foreach (DictionaryEntry pair in views)
             {
                 object view = pair.Value;
                 SpriteRenderer body = ReadBody(view);
                 if (body == null)
                 {
-                    index++;
+                    fallbackIndex++;
                     continue;
                 }
 
                 bool boss = ReadBool(view, "IsBoss");
                 TextMesh label = ReadLabel(view);
                 string labelText = label != null ? label.text : string.Empty;
-
                 int spriteIndex = boss
                     ? ResolveBossSpriteIndex()
-                    : ResolveMonsterSpriteIndex(labelText, index);
+                    : ResolveMonsterSpriteIndex(labelText, fallbackIndex);
 
                 ApplySprite(body, atlasSprites[spriteIndex], boss ? 1.20f : 1.02f, boss);
                 MoveHud(body.transform.parent, boss ? 1.30f : 0.92f, boss ? 1.02f : 0.69f);
-                index++;
+                fallbackIndex++;
             }
         }
 
@@ -230,8 +297,7 @@ namespace PeanutWarrior.Prototype
             if (body == null || sprite == null) return;
 
             Transform root = body.transform.parent;
-            if (root != null)
-                RemoveLegacyOverlay(root);
+            if (root != null) RemoveLegacyOverlay(root);
 
             body.gameObject.SetActive(true);
             body.sprite = sprite;
@@ -249,41 +315,38 @@ namespace PeanutWarrior.Prototype
             if (root == null || !cleanedRoots.Add(root.GetInstanceID())) return;
 
             string[] names = { "Procedural Visual", "Illustrated Visual", "Illustrated Aura" };
-            for (int i = 0; i < names.Length; i++)
+            for (int index = 0; index < names.Length; index++)
             {
-                Transform child = root.Find(names[i]);
+                Transform child = root.Find(names[index]);
                 if (child != null) Destroy(child.gameObject);
             }
         }
 
-        private void MoveHud(Transform root, float labelY, float healthY)
+        private static void MoveHud(Transform root, float labelY, float healthY)
         {
             if (root == null) return;
 
             Transform label = root.Find("Label");
-            if (label != null)
-                label.localPosition = new Vector3(0f, labelY, 0f);
+            if (label != null) label.localPosition = new Vector3(0f, labelY, 0f);
 
             Transform health = root.Find("Health Back");
-            if (health != null)
-                health.localPosition = new Vector3(0f, healthY, 0f);
+            if (health != null) health.localPosition = new Vector3(0f, healthY, 0f);
 
             Transform shadow = root.Find("Shadow");
-            if (shadow != null)
-                shadow.localPosition = new Vector3(0f, -0.55f, 0f);
+            if (shadow != null) shadow.localPosition = new Vector3(0f, -0.55f, 0f);
         }
 
         private void EnsureCompanions()
         {
             if (worldRoot == null || playerRoot == null || companions.Count == 3) return;
 
-            for (int i = companions.Count; i < 3; i++)
+            for (int index = companions.Count; index < 3; index++)
             {
-                GameObject companion = new GameObject($"Illustrated Support Peanut {i + 1}");
+                GameObject companion = new GameObject($"Illustrated Support Peanut {index + 1}");
                 companion.transform.SetParent(worldRoot.transform, false);
 
                 SpriteRenderer renderer = companion.AddComponent<SpriteRenderer>();
-                renderer.sprite = atlasSprites[i + 1];
+                renderer.sprite = atlasSprites[index + 1];
                 renderer.color = Color.white;
                 renderer.sortingOrder = 5;
                 companion.transform.localScale = Vector3.one * 0.72f;
@@ -302,13 +365,13 @@ namespace PeanutWarrior.Prototype
                 new Vector3(1.20f, -0.62f, 0f)
             };
 
-            for (int i = 0; i < companions.Count; i++)
+            for (int index = 0; index < companions.Count; index++)
             {
-                Transform companion = companions[i];
+                Transform companion = companions[index];
                 if (companion == null) continue;
 
-                float phase = Time.time * 0.45f + i * 2.094f;
-                Vector3 target = playerRoot.position + offsets[i] +
+                float phase = Time.time * 0.45f + index * 2.094f;
+                Vector3 target = playerRoot.position + offsets[index] +
                     new Vector3(Mathf.Cos(phase) * 0.08f, Mathf.Sin(phase * 1.6f) * 0.07f, 0f);
 
                 companion.position = Vector3.Lerp(
@@ -316,7 +379,7 @@ namespace PeanutWarrior.Prototype
                     target,
                     1f - Mathf.Exp(-8f * Time.deltaTime));
 
-                float breathe = 1f + Mathf.Sin(Time.time * 4.2f + i) * 0.025f;
+                float breathe = 1f + Mathf.Sin(Time.time * 4.2f + index) * 0.025f;
                 companion.localScale = Vector3.one * 0.72f * breathe;
                 companion.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(phase) * 2f);
             }
@@ -330,8 +393,8 @@ namespace PeanutWarrior.Prototype
             if (theme == currentTheme) return;
             currentTheme = theme;
 
-            for (int i = environmentRoot.childCount - 1; i >= 0; i--)
-                Destroy(environmentRoot.GetChild(i).gameObject);
+            for (int index = environmentRoot.childCount - 1; index >= 0; index--)
+                Destroy(environmentRoot.GetChild(index).gameObject);
 
             Color[] cameraColors =
             {
@@ -371,16 +434,16 @@ namespace PeanutWarrior.Prototype
                 new Vector3(7.0f, 2.75f, 0f)
             };
 
-            for (int i = 0; i < positions.Length; i++)
+            for (int index = 0; index < positions.Length; index++)
             {
-                GameObject decor = new GameObject($"Theme Decor {i + 1}");
+                GameObject decor = new GameObject($"Theme Decor {index + 1}");
                 decor.transform.SetParent(environmentRoot, false);
-                decor.transform.localPosition = positions[i];
-                decor.transform.localScale = Vector3.one * (i % 3 == 0 ? 1.22f : 0.92f);
+                decor.transform.localPosition = positions[index];
+                decor.transform.localScale = Vector3.one * (index % 3 == 0 ? 1.22f : 0.92f);
 
                 SpriteRenderer renderer = decor.AddComponent<SpriteRenderer>();
                 renderer.sprite = atlasSprites[20 + theme];
-                renderer.color = new Color(1f, 1f, 1f, i < 2 ? 0.70f : 0.92f);
+                renderer.color = new Color(1f, 1f, 1f, index < 2 ? 0.70f : 0.92f);
                 renderer.sortingOrder = -16;
             }
         }
@@ -419,7 +482,7 @@ namespace PeanutWarrior.Prototype
         {
             if (view == null) return false;
             FieldInfo field = view.GetType().GetField(fieldName, PublicInstance);
-            return field != null && System.Convert.ToBoolean(field.GetValue(view));
+            return field != null && Convert.ToBoolean(field.GetValue(view));
         }
     }
 }
